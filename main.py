@@ -345,7 +345,7 @@ async def ticket_kur(ctx):
 
 @bot.command()
 async def çekiliş(ctx):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල් Yönetim"]
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
     kullanici_rolleri = [role.name for role in ctx.author.roles]
     yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
@@ -390,7 +390,7 @@ async def ai(ctx, *, soru: str):
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None, 
-                lambda: ai_client.models.generate_content(model='gemini-2.5-flash', contents=soru)
+                lambda: ai_client.models.generate_content(model='gemini-1.5-flash', contents=soru)
             )
             cevap = response.text
             if len(cevap) > 2000:
@@ -426,7 +426,7 @@ async def on_message(message):
                     loop = asyncio.get_running_loop()
                     response = await loop.run_in_executor(
                         None, 
-                        lambda: ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                        lambda: ai_client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
                     )
                     
                     cevap = response.text
@@ -440,7 +440,6 @@ async def on_message(message):
                     await message.reply(yanit_metni)
                 except Exception as e:
                     print(f"AI Ticket Hatası: {e}")
-                    # Hatanın ne olduğunu doğrudan kanala yazdıralım ki sebebi görebilelim
                     await message.channel.send(f"⚠️ AI Ticket Hatası Oluştu: `{e}`")
 
 # --- BAŞLATMA ---

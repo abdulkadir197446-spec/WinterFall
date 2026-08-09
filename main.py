@@ -96,14 +96,27 @@ async def on_ready():
     print(f'Bot başarıyla giriş yaptı: {bot.user.name}')
     await bot.change_presence(activity=discord.Game(name="!yardım | WinterFall"))
 
-# --- TICKET KOMUTU ---
+# --- ÖZEL YETKİLİ TICKET KURMA KOMUTU ---
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def ticket_kur(ctx):
+    """Sadece belirlenen üst yetkililere özel ticket paneli kurma komutu."""
+    izinli_roller = [
+        "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim",
+        "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
+    ]
+    
+    kullanici_rolleri = [role.name for role in ctx.author.roles]
+    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
+
+    if not yetkili_mi:
+        await ctx.send("❌ Bu komutu sadece **𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim** ve **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** yetkilileri kullanabilir!", delete_after=5)
+        return
+
     try:
         await ctx.message.delete()
     except:
         pass
+
     embed = discord.Embed(
         title="Bilet Oluştur",
         description="Ticket açmak için aşağıdaki **Seçim yap** menüsünden uygun kategoriyi seçin.",
@@ -115,8 +128,6 @@ async def ticket_kur(ctx):
 @bot.command()
 async def sil(ctx, miktar: int = None):
     """Sadece belirtilen yetkili rollere özel mesaj silme komutu."""
-    
-    # İzin verilen tam rol isimleri
     izinli_roller = [
         "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧",
         "❄ 𝙈𝙖𝙮𝙤𝙧",
@@ -126,8 +137,6 @@ async def sil(ctx, miktar: int = None):
     ]
     
     kullanici_rolleri = [role.name for role in ctx.author.roles]
-    
-    # Kullanıcı sunucu sahibi mi yoksa izinli rollerden birine sahip mi?
     yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
     if not yetkili_mi:
@@ -142,7 +151,6 @@ async def sil(ctx, miktar: int = None):
         await ctx.send("❌ Lütfen 1 ile 100 arasında bir sayı girin.", delete_after=5)
         return
 
-    # Komut mesajıyla birlikte siler
     deleted = await ctx.channel.purge(limit=miktar + 1)
     
     embed = discord.Embed(

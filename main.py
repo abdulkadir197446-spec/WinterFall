@@ -337,7 +337,7 @@ async def sunucu(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="i", description="Davet istatistikleri.")
+@bot.tree.command(name="invite", description="Davet istatistikleri.")
 @app_commands.describe(member="İstatistiklerine bakılacak üye")
 async def invite_bak(interaction: discord.Interaction, member: discord.Member = None):
     hedef = member or interaction.user
@@ -576,4 +576,3 @@ if __name__ == '__main__':
     token = os.environ.get('BOT_TOKEN')
     if token: bot.run(token)
     else: print("HATA: BOT_TOKEN bulunamadı!")
-        

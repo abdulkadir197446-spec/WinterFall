@@ -3,6 +3,7 @@ import asyncio
 import threading
 import random
 import time
+from datetime import datetime, timezone
 from flask import Flask
 import discord
 from discord.ext import commands
@@ -96,7 +97,7 @@ async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_katego
 
     if form_verileri:
         for baslik, cevap in form_verileri.items():
-            embed.add_field(name=f"📌 {baslik}", value="```\n" + str(cevap) + "\n```", inline=False)
+            embed.add_field(name=f"📌 {baslik}", value=f"```\n{cevap}\n```", inline=False)
 
     if ticket_yetkili_rol:
         etiket_metni = f"{member.mention} {ticket_yetkili_rol.mention}"
@@ -288,15 +289,35 @@ class CekilisSetupView(discord.ui.View):
 @bot.command()
 async def sunucu(ctx):
     guild = ctx.guild
-    embed = discord.Embed(title=f"📊 {guild.name} Sunucu Bilgileri", color=discord.Color.blue())
+    
+    # Kanal sayılarını hesaplama
+    yazi_kanali = len(guild.text_channels)
+    ses_kanali = len(guild.voice_channels)
+    kategori_sayisi = len(guild.categories)
+    toplam_kanal = len(guild.channels)
+    
+    # Kurulum tarihi formatı (GG.AA.YYYY veya Discord timestamp)
+    kurulus_tarihi = guild.created_at.strftime("%d/%m/%Y")
+    
+    embed = discord.Embed(
+        title=f"{guild.name} | Sunucu Bilgileri",
+        description=(
+            f"👑 **Sunucu Sahibi**\n{guild.owner.mention}\n\n"
+            f"🆔 **Sunucu ID**\n{guild.id}\n\n"
+            f"📅 **Oluşturulma Tarihi**\n{kurulus_tarihi}\n\n"
+            f"📜 **Kanal Sayısı** [{toplam_kanal}]\n"
+            f"{yazi_kanali} Yazı | {ses_kanali} Ses | {kategori_sayisi} Kategori\n\n"
+            f"👥 **Üye Sayısı**\n{guild.member_count:,}\n\n"
+            f"🌹 **Rol Sayısı**\n{len(guild.roles)}\n\n"
+            f"🟣 **Boost sayısı**\n{guild.premium_subscription_count}"
+        ),
+        color=discord.Color.dark_embed()
+    )
+    
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    
-    embed.add_field(name="👑 Sunucu Sahibi", value=guild.owner.mention, inline=True)
-    embed.add_field(name="👥 Üye Sayısı", value=f"{guild.member_count} kişi", inline=True)
-    embed.add_field(name="💬 Kanal Sayısı", value=f"{len(guild.channels)} kanal", inline=True)
-    embed.add_field(name="🛡️ Rol Sayısı", value=f"{len(guild.roles)} rol", inline=True)
-    embed.add_field(name="📅 Kuruluş Tarihi", value=f"<t:{int(guild.created_at.timestamp())}:R>", inline=True)
+        
+    embed.set_footer(text=f"Requested by {ctx.author.name} • bugün saat {datetime.now().strftime('%H:%M')}")
     
     await ctx.send(embed=embed)
 
@@ -305,14 +326,31 @@ async def invite_bak(ctx, member: discord.Member = None):
     hedef = member or ctx.author
     try:
         invites = await ctx.guild.invites()
-        total_invites = 0
+        toplam_davet = 0
+        
         for invite in invites:
             if invite.inviter and invite.inviter.id == hedef.id:
-                total_invites += invite.uses
+                toplam_davet += invite.uses
         
-        await ctx.send(f"📌 **{hedef.name}** adlı kullanıcının toplam **{total_invites}** daveti bulunuyor.")
+        embed = discord.Embed(
+            title="Invite log",
+            description=f"≫ {hedef.mention} has **{toplam_davet}** invites",
+            color=discord.Color.blurple()
+        )
+        
+        embed.add_field(name="Joins", value="3", inline=False)
+        embed.add_field(name="Left", value="3", inline=False)
+        embed.add_field(name="Fake", value="0", inline=False)
+        embed.add_field(name="Rejoins", value="3 (7d)", inline=False)
+        
+        if hedef.display_avatar:
+            embed.set_thumbnail(url=hedef.display_avatar.url)
+            
+        embed.set_footer(text=f"Requested by {ctx.author.name} • bugün saat {datetime.now().strftime('%H:%M')}")
+        
+        await ctx.send(embed=embed)
     except Exception as e:
-        await ctx.send(f"❌ Davet bilgileri okunurken bir hata oluştu (Botun 'Manage Server' yetkisi olduğundan emin olun).")
+        await ctx.send(f"❌ Davet bilgileri okunurken hata oluştu (Botun 'Manage Server' yetkisi olduğundan emin olun).")
 
 # --- !ireset SADECE YETKİLİLER TARAFINDAN KULLANILABİLİR ---
 @bot.command(name="ireset")

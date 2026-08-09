@@ -387,7 +387,7 @@ async def ai(ctx, *, soru: str):
     
     async with ctx.typing():
         try:
-            response = ai_client.models.generate_content(
+            response = await ai_client.aio.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=soru,
             )
@@ -414,7 +414,7 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-    # KANAL İSMİ KONTROLÜ (İçinde partnerlik, ticket, ekip vb. geçen kanallarda direkt çalışır)
+    # KANAL İSMİ KONTROLÜ
     kanal_adi = message.channel.name.lower()
     if any(kelime in kanal_adi for kelime in ["partnerlik", "ticket", "ekip", "merge", "ally", "destek"]):
         if ai_client and not message.content.startswith('!'):
@@ -422,7 +422,7 @@ async def on_message(message):
                 try:
                     prompt = f"Sen WinterFall adlı Minecraft ve topluluk sunucusunun destek yapay zeka asistanısın. Kullanıcının yazdığı mesaja yardımcı, kibar ve Türkçe olarak kısa/öz bir yanıt ver:\n\nKullanıcı Mesajı: {message.content}"
                     
-                    response = ai_client.models.generate_content(
+                    response = await ai_client.aio.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=prompt,
                     )

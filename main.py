@@ -310,10 +310,35 @@ class CekilisSetupView(discord.ui.View):
 @bot.tree.command(name="sunucu", description="Sunucu bilgisi gösterir.")
 async def sunucu(interaction: discord.Interaction):
     guild = interaction.guild
-    embed = discord.Embed(title=f"{guild.name} | Bilgiler", description=f"👑 Sahip: {guild.owner.mention}\n👥 Üye: {guild.member_count}")
+    
+    # Kanal türlerini sayma
+    yazi_kanali = len(guild.text_channels)
+    ses_kanali = len(guild.voice_channels)
+    kategori_sayisi = len(guild.categories)
+    
+    # Oluşturulma tarihi timestamp formatı (Discord'un yerel zaman damgası)
+     kuruldu_timestamp = int(guild.created_at.timestamp())
+
+    embed = discord.Embed(
+        title=f"❄️ {guild.name} | Sunucu Bilgileri",
+        color=discord.Color.dark_theme()
+    )
+    
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+        
+    embed.add_field(name="👑 Sunucu Sahibi", value=guild.owner.mention if guild.owner else "Bulunamadı", inline=False)
+    embed.add_field(name="🆔 Sunucu ID", value=str(guild.id), inline=False)
+    embed.add_field(name="📅 Oluşturulma Tarihi", value=f"<t:{kuruldu_timestamp}:D> (<t:{kuruldu_timestamp}:R>)", inline=False)
+    embed.add_field(name="📜 Kanal Sayısı", value=f"[{guild.channels.__len__()}]\n{yazi_kanali} Yazı | {ses_kanali} Ses | {kategori_sayisi} Kategori", inline=False)
+    embed.add_field(name="👤 Üye Sayısı", value=str(guild.member_count), inline=False)
+    embed.add_field(name="🌹 Rol Sayısı", value=str(len(guild.roles)), inline=False)
+    embed.add_field(name="🟣 Boost sayısı", value=str(guild.premium_subscription_count), inline=False)
+
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="i", description="Davet istatistikleri.")
+@app_commands.describe(member="İstatistiklerine bakılacak üye")
 async def invite_bak(interaction: discord.Interaction, member: discord.Member = None):
     hedef = member or interaction.user
     conn = sqlite3.connect('davetler.db')
@@ -321,8 +346,23 @@ async def invite_bak(interaction: discord.Interaction, member: discord.Member = 
     cursor.execute('SELECT joins, lefts, fakes, rejoins FROM davet_loglari WHERE user_id = ?', (hedef.id,))
     row = cursor.fetchone()
     conn.close()
+    
     joins, lefts, fakes, rejoins = (row if row else (0, 0, 0, 0))
-    await interaction.response.send_message(f"≫ {hedef.mention} toplam **{joins}** davete sahip.", ephemeral=True)
+
+    embed = discord.Embed(title="Invite log", color=discord.Color.dark_theme())
+    embed.description = f"≫ {hedef.mention} has **{joins}** invites"
+    
+    if hedef.avatar:
+        embed.set_thumbnail(url=hedef.avatar.url)
+    else:
+        embed.set_thumbnail(url=hedef.default_avatar.url)
+
+    embed.add_field(name="Joins", value=str(joins), inline=False)
+    embed.add_field(name="Left", value=str(lefts), inline=False)
+    embed.add_field(name="Fake", value=str(fakes), inline=False)
+    embed.add_field(name="Rejoins", value=f"{rejoins} (7d)", inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="ireset", description="Davetleri sıfırlar.")
 async def invite_reset(interaction: discord.Interaction):
@@ -443,12 +483,10 @@ async def kilitle(interaction: discord.Interaction, durum: str):
 
     try:
         if durum == "kapat":
-            # Üyelerin (everyone rolünün) mesaj göndermesini kapatır, yetkililer kendi rollerinden yazmaya devam eder
             await channel.set_permissions(default_role, send_messages=False)
             await channel.send("🔒 **Bu kanal yetkililer tarafından kilitlendi!** Üyeler mesaj gönderemez.")
             await interaction.followup.send("✅ Kanal üyeler için kilitlendi (Yetkililer yazabilir).", ephemeral=True)
         elif durum == "ac":
-            # Üyelerin mesaj gönderme iznini normale döndürür
             await channel.set_permissions(default_role, send_messages=None)
             await channel.send("🔓 **Kanalın kilidi açıldı!** Tekrar mesaj yazabilirsiniz.")
             await interaction.followup.send("✅ Kanalın kilidi açıldı.", ephemeral=True)
@@ -516,7 +554,6 @@ async def on_member_remove(member):
 async def on_message(message):
     if message.author.bot: return
 
-    # AI SADECE AÇIK TICKETLAR KATEGORİSİNDE ÇALIŞIR
     if is_ticket_channel(message.channel):
         async with message.channel.typing():
             yanit = await ai_yanit_uret(message.content)

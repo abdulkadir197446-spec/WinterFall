@@ -51,25 +51,27 @@ class TicketSelect(discord.ui.Select):
         member = interaction.user
         secilen_kategori = self.values[0]
 
-        # Kanal adı formatı (örn: genel-destek-ohridinbabasi)
         kanal_adi = f"{secilen_kategori.lower().replace(' ', '-')}-{member.name.lower()}"
 
-        # Kullanıcının zaten aynı isimde açık kanalı var mı kontrol et
         existing_channel = discord.utils.get(guild.channels, name=kanal_adi)
         if existing_channel:
             await interaction.response.send_message(f"Zaten açık bir **{secilen_kategori}** talebiniz var: {existing_channel.mention}", ephemeral=True)
             return
 
-        # Kanal izinleri
+        kategori_adi = "AÇIK TICKETLAR"
+        category = discord.utils.get(guild.categories, name=kategori_adi)
+        if not category:
+            category = await guild.create_category(kategori_adi)
+
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
 
-        # Kanalı oluştur
         ticket_channel = await guild.create_text_channel(
             name=kanal_adi,
+            category=category,
             overwrites=overwrites
         )
 
@@ -86,7 +88,7 @@ class TicketSelectView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(TicketSelect())
 
-# --- ETKİNLİKLER (EVENTS) ---
+# --- ETKİNLİKLER ---
 @bot.event
 async def on_ready():
     bot.add_view(TicketSelectView())
@@ -98,8 +100,10 @@ async def on_ready():
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def ticket_kur(ctx):
-    """Görseldeki gibi seçim menülü ticket sistemini kanala kurar."""
-    await ctx.message.delete()
+    try:
+        await ctx.message.delete()
+    except:
+        pass
     embed = discord.Embed(
         title="Bilet Oluştur",
         description="Ticket açmak için aşağıdaki **Seçim yap** menüsünden uygun kategoriyi seçin.",
@@ -107,16 +111,45 @@ async def ticket_kur(ctx):
     )
     await ctx.send(embed=embed, view=TicketSelectView())
 
-# --- GENEL KOMUTLAR ---
+# --- ÖZEL YETKİLİ MESAJ SİLME KOMUTU ---
 @bot.command()
-@commands.has_permissions(manage_messages=True)
-async def sil(ctx, miktar: int = 10):
-    await ctx.channel.purge(limit=miktar + 1)
-    await ctx.send(f'🧹 **{miktar}** adet mesaj silindi.', delete_after=5)
+async def sil(ctx, miktar: int = None):
+    """Sadece belirtilen yetkili rollere özel mesaj silme komutu."""
+    
+    # İzin verilen tam rol isimleri
+    izinli_roller = [
+        "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧",
+        "❄ 𝙈𝙖𝙮𝙤𝙧",
+        "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧",
+        "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥",
+        "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"
+    ]
+    
+    kullanici_rolleri = [role.name for role in ctx.author.roles]
+    
+    # Kullanıcı sunucu sahibi mi yoksa izinli rollerden birine sahip mi?
+    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
-@bot.command()
-async def ping(ctx):
-    await ctx.send(f'🏓 Pong! Gecikme süresi: **{round(bot.latency * 1000)}ms**')
+    if not yetkili_mi:
+        await ctx.send("❌ Bu komutu sadece belirlenen **WinterFall Yetkilileri** kullanabilir!", delete_after=5)
+        return
+
+    if miktar is None:
+        await ctx.send("❌ Lütfen silinecek mesaj miktarını belirtin! Örnek: `!sil 10`", delete_after=5)
+        return
+
+    if miktar <= 0 or miktar > 100:
+        await ctx.send("❌ Lütfen 1 ile 100 arasında bir sayı girin.", delete_after=5)
+        return
+
+    # Komut mesajıyla birlikte siler
+    deleted = await ctx.channel.purge(limit=miktar + 1)
+    
+    embed = discord.Embed(
+        description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed, delete_after=4)
 
 # --- BAŞLATMA ---
 if __name__ == '__main__':

@@ -38,7 +38,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "WinterFall Bot 7/24 Aktif! (Slash Komutları ve Ses Sistemi Devrede)"
+    return "WinterFall Bot 7/24 Aktif! (Slash Komutları ve Sınırsız Ses Sistemi Devrede)"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -420,7 +420,7 @@ async def invite_reset(interaction: discord.Interaction):
     except Exception as e:
         await interaction.response.send_message(f"❌ Davetler sıfırlanırken hata oluştu: {e}", ephemeral=True)
 
-@bot.tree.command(name="bağlan", description="Botun ses kanalına katılmasını sağlar (Yalnızca yetkili).")
+@bot.tree.command(name="bağlan", description="Botun ses kanalında kalıcı/sınırsız kalmasını sağlar (Yalnızca yetkili).")
 async def baglan(interaction: discord.Interaction):
     if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
         await interaction.response.send_message("❌ Bu komutu sadece yetkililer kullanabilir!", ephemeral=True)
@@ -437,8 +437,9 @@ async def baglan(interaction: discord.Interaction):
         if interaction.guild.voice_client:
             await interaction.guild.voice_client.move_to(channel)
         else:
-            await channel.connect()
-        await interaction.followup.send(f"🔊 Ses kanalına katıldım: **{channel.name}**", ephemeral=True)
+            # self_deaf=True ile bot kulaklık kapatır ve ses kanalında çökmeden/atılmadan sınırsız kalır
+            await channel.connect(self_deaf=True)
+        await interaction.followup.send(f"🔊 Ses kanalına katıldım ve kalıcı olarak sabitlendim: **{channel.name}**", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Ses kanalına bağlanırken hata oluştu: {e}", ephemeral=True)
 
@@ -468,7 +469,6 @@ async def konus(interaction: discord.Interaction, mesaj: str):
     await interaction.response.defer(ephemeral=True)
 
     try:
-        # gTTS ile metni sese çevirip geçici dosya kaydediyoruz
         tts = gTTS(text=mesaj, lang='tr')
         dosya_adi = "ses.mp3"
         tts.save(dosya_adi)
@@ -595,7 +595,6 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. YAPAY ZEKA SİSTEMİ
     if bot.user.mentioned_in(message) or is_ticket_channel(message.channel):
         temiz_mesaj = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if temiz_mesaj:
@@ -604,7 +603,6 @@ async def on_message(message):
                 await message.reply(cevap)
         return
 
-    # 2. DOĞAL DİLLE KANAL OLUŞTURMA MANTIĞI
     icerik = message.content.lower()
     if ("kanal" in icerik or "kanalı" in icerik) and ("oluş" in icerik or "aç" in icerik):
         if yetkili_mi_kontrol_etmek(message.author, message.guild):

@@ -1,71 +1,566 @@
 import os
 import asyncio
 import threading
+import random
+import sqlite3
+import time
+from datetime import datetime, timezone
+from flask import Flask
 import discord
 from discord.ext import commands
-from flask import Flask
 from google import genai
 
 # --- Gemini AI Kurulumu ---
 ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# --- Flask 7/24 ---
+# --- Veritabanı (SQLite) Kurulumu (Davetler İçin) ---
+def veritabani_kur():
+    conn = sqlite3.connect('davetler.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS davet_loglari (
+            user_id INTEGER PRIMARY KEY,
+            joins INTEGER DEFAULT 0,
+            lefts INTEGER DEFAULT 0,
+            fakes INTEGER DEFAULT 0,
+            rejoins INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+veritabani_kur()
+
+# --- Render İçin Web Sunucusu ---
 app = Flask('')
+
 @app.route('/')
-def home(): return "WinterFall Bot 7/24 Aktif!"
-def run_flask(): app.run(host='0.0.0.0', port=8080)
+def home():
+    return "WinterFall Bot 7/24 Aktif!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
 
 # --- Discord Bot Kurulumu ---
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.presences = True
+intents.guilds = True
+intents.invites = True
+
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
-# --- YARDIMCI FONKSİYONLAR ---
+# Davetleri cache'lemek için sözlük
+invite_cache = {}
+
+# Yetkili Kontrol Fonksiyonu
+def yetkili_mi_kontrol_etmek(author, guild):
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡 Yönetim"]
+    kullanici_rolleri = [role.name for role in author.roles]
+    return author.id == guild.owner_id or any(r in kullanici_rolleri for r in kullanici_rolleri)
+
+def yetkili_mi_kontrol(ctx):
+    return yetkili_mi_kontrol_etmek(ctx.author, ctx.guild)
+
+# --- TICKET KATEGORİ KONTROLÜ (YZ İÇİN) ---
 def is_ticket_channel(channel):
-    """Kanalın 'AÇIK TICKETLAR' kategorisinde olup olmadığını kontrol eder."""
     return channel.category and channel.category.name == "AÇIK TICKETLAR"
 
-# --- BOT OLAYLARI (MESAJ DİNLEYİCİ) ---
+# --- TICKET KAPATMA BUTONU ---
+class TicketKapatView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🔒 Desteği Kapat", style=discord.ButtonStyle.red, custom_id="close_ticket")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        kullanici_rolleri = [role.name for role in interaction.user.roles]
+        yetkili_mi = interaction.user.id == interaction.guild.owner_id or "Ticket Yetkili" in kullanici_rolleri
+
+        if not yetkili_mi:
+            await interaction.response.send_message("❌ Desteği sadece **Ticket Yetkili** rolüne sahip kişiler kapatabilir!", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Destek kanalı kapatılıyor...", ephemeral=True)
+        await asyncio.sleep(2)
+        try:
+            await interaction.channel.delete()
+        except Exception as e:
+            print(f"Kanal silinirken hata oluştu: {e}")
+
+# --- ORTAK TICKET OLUŞTURMA FONKSİYONU ---
+async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_kategori: str, form_verileri: dict = None):
+    guild = interaction.guild
+    member = interaction.user
+
+    for channel in guild.channels:
+        if isinstance(channel, discord.TextChannel) and channel.name.endswith(f"-{member.name.lower()}"):
+            await interaction.response.send_message(f"❌ Zaten açık bir destek talebiniz bulunuyor: {channel.mention}", ephemeral=True)
+            return
+
+    kategori_adi = "AÇIK TICKETLAR"
+    category = discord.utils.get(guild.categories, name=kategori_adi)
+    if not category:
+        category = await guild.create_category(kategori_adi)
+
+    ticket_yetkili_rol = discord.utils.get(guild.roles, name="Ticket Yetkili")
+
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    }
+
+    if ticket_yetkili_rol:
+        overwrites[ticket_yetkili_rol] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+    kanal_adi = f"{secilen_kategori.lower().replace(' ', '-')}-{member.name.lower()}"
+
+    ticket_channel = await guild.create_text_channel(
+        name=kanal_adi,
+        category=category,
+        overwrites=overwrites
+    )
+
+    embed = discord.Embed(
+        title=f"🎫 {secilen_kategori} Talebi Açıldı",
+        description=f"Merhaba {member.mention}, yetkililerimiz ve yapay zeka asistanımız en kısa sürede sizinle ilgilenecektir.\n\nDesteği kapatmak için aşağıdaki **Desteği Kapat** butonuna basabilirsiniz.",
+        color=discord.Color.blue()
+    )
+
+    if form_verileri:
+        for baslik, cevap in form_verileri.items():
+            embed.add_field(name=f"📌 {baslik}", value=f"```\n{cevap}\n```", inline=False)
+
+    if ticket_yetkili_rol:
+        etiket_metni = f"{member.mention} {ticket_yetkili_rol.mention}"
+    else:
+        etiket_metni = f"{member.mention} @Ticket Yetkili"
+
+    await ticket_channel.send(content=etiket_metni, embed=embed, view=TicketKapatView())
+    await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+
+# --- TICKET MODALLARI ---
+class EkipAlimFormu(discord.ui.Modal, title="Ekip Alım Başvuru Formu"):
+    eski_ekip = discord.ui.TextInput(label="Eski ekibin?", placeholder="Örn: Vanguard", style=discord.TextStyle.short, required=True)
+    sunucu = discord.ui.TextInput(label="Hangi sunucuda oynuyorsun?", placeholder="Örn: CraftRise", style=discord.TextStyle.short, required=True)
+    oyun_ici_isim = discord.ui.TextInput(label="Oyun içi ismin ne?", placeholder="Örn: Steve", style=discord.TextStyle.short, required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await olustur_ticket_kanali(interaction, "Ekip Alım", {
+            "Eski Ekibi": self.eski_ekip.value,
+            "Oynadığı Sunucu": self.sunucu.value,
+            "Oyun İçi İsmi": self.oyun_ici_isim.value
+        })
+
+class MergeFormu(discord.ui.Modal, title="Merge Başvuru Formu"):
+    kim_kime = discord.ui.TextInput(label="Kim kime katılacak?", placeholder="Örn: X ekibi, Y ekibine katılacak.", style=discord.TextStyle.paragraph, required=True)
+    ekip_ismi = discord.ui.TextInput(label="Ekip ismi?", placeholder="Örn: WinterFall", style=discord.TextStyle.short, required=True)
+    sunucular = discord.ui.TextInput(label="Hangi sunucularda oynuyorsunuz?", placeholder="Örn: CraftRise, SonOyuncu", style=discord.TextStyle.short, required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await olustur_ticket_kanali(interaction, "Merge", {
+            "Kim Kime Katılacak": self.kim_kime.value,
+            "Ekip İsmi": self.ekip_ismi.value,
+            "Sunucular": self.sunucular.value
+        })
+
+class AllyFormu(discord.ui.Modal, title="Ally Başvuru Formu"):
+    ekip_ismi = discord.ui.TextInput(label="Ekip ismi?", placeholder="Örn: WinterFall", style=discord.TextStyle.short, required=True)
+    sunucular = discord.ui.TextInput(label="Hangi sunucularda oynuyorsunuz?", placeholder="Örn: CraftRise, SonOyuncu", style=discord.TextStyle.short, required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await olustur_ticket_kanali(interaction, "Ally", {
+            "Ekip İsmi": self.ekip_ismi.value,
+            "Sunucular": self.sunucular.value
+        })
+
+class GenelDestekFormu(discord.ui.Modal, title="Genel Destek Formu"):
+    sorun = discord.ui.TextInput(label="Sorun nedir?", placeholder="Yaşadığınız sorunu kısaca buraya yazın...", style=discord.TextStyle.paragraph, required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await olustur_ticket_kanali(interaction, "Genel Destek", {
+            "Sorun": self.sorun.value
+        })
+
+# --- AÇILIR MENÜ ---
+class TicketSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Ekip Alım", emoji="👤", description="Ekip başvurusu için form doldurun."),
+            discord.SelectOption(label="Merge", emoji="🔗", description="Merge işlemleri için form doldurun."),
+            discord.SelectOption(label="Partnerlik", emoji="💖", description="Partnerlik görüşmeleri için ticket açar."),
+            discord.SelectOption(label="Ally", emoji="⚔️", description="Müttefiklik (Ally) için form doldurun."),
+            discord.SelectOption(label="Genel Destek", emoji="⚙️", description="Bir sorun bildirmek için form doldurun.")
+        ]
+        super().__init__(placeholder="Seçim yap", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu")
+
+    async def callback(self, interaction: discord.Interaction):
+        secilen_kategori = self.values[0]
+
+        if secilen_kategori == "Ekip Alım":
+            await interaction.response.send_modal(EkipAlimFormu())
+        elif secilen_kategori == "Merge":
+            await interaction.response.send_modal(MergeFormu())
+        elif secilen_kategori == "Ally":
+            await interaction.response.send_modal(AllyFormu())
+        elif secilen_kategori == "Genel Destek":
+            await interaction.response.send_modal(GenelDestekFormu())
+        else:
+            await olustur_ticket_kanali(interaction, secilen_kategori)
+
+class TicketSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(TicketSelect())
+
+# --- ÇEKİLİŞ SİSTEMİ ---
+def parse_time(time_str):
+    time_str = time_str.lower().strip()
+    if time_str.endswith('m'):
+        return int(time_str[:-1]) * 60
+    elif time_str.endswith('h'):
+        return int(time_str[:-1]) * 3600
+    elif time_str.endswith('d'):
+        return int(time_str[:-1]) * 86400
+    return int(time_str) * 60
+
+class CekilisKatilView(discord.ui.View):
+    def __init__(self, embed=None, mesaj=None):
+        super().__init__(timeout=None)
+        self.katilimcilar = set()
+        self.embed = embed
+        self.mesaj = mesaj
+
+    @discord.ui.button(label="🎉 Katıl", style=discord.ButtonStyle.blurple, custom_id="cekilis_katil")
+    async def katil(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in self.katilimcilar:
+            self.katilimcilar.add(interaction.user.id)
+            await interaction.response.send_message("🎉 Çekilişe başarıyla katıldın!", ephemeral=True)
+        else:
+            self.katilimcilar.remove(interaction.user.id)
+            await interaction.response.send_message("Çekilişten ayrıldın.", ephemeral=True)
+        
+        if self.embed and self.mesaj:
+            try:
+                self.embed.set_field_at(0, name="📊 Katılımcı Sayısı", value=f"**{len(self.katilimcilar)}** kişi katıldı", inline=False)
+                await self.mesaj.edit(embed=self.embed)
+            except:
+                pass
+
+class CekilisModal(discord.ui.Modal, title="Çekiliş Oluştur"):
+    sure = discord.ui.TextInput(label="Süre (Örn: 10m, 1h, 1d)", placeholder="Örn: 10m", style=discord.TextStyle.short)
+    kazanan = discord.ui.TextInput(label="Kazanan Sayısı", placeholder="1", style=discord.TextStyle.short)
+    odul = discord.ui.TextInput(label="Ödül", placeholder="Örn: VIP Üyelik", style=discord.TextStyle.short)
+    aciklama = discord.ui.TextInput(label="Açıklama (İsteğe Bağlı)", placeholder="Şartlar vs.", style=discord.TextStyle.paragraph, required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            saniye = parse_time(self.sure.value)
+            kazanan_sayisi = int(self.kazanan.value)
+        except:
+            await interaction.response.send_message("❌ Hatalı süre veya kazanan sayısı girdiniz!", ephemeral=True)
+            return
+
+        timestamp = int(time.time() + saniye)
+
+        embed = discord.Embed(title=f"🎉 {self.odul.value}", color=discord.Color.dark_theme())
+        embed.add_field(name="📊 Katılımcı Sayısı", value="**0** kişi katıldı", inline=False)
+        
+        if self.aciklama.value:
+            embed.description = f"{self.aciklama.value}\n\n**Sona Erme:** <t:{timestamp}:R>\n**Düzenleyen:** {interaction.user.mention}\n**Kazanan Sayısı:** {kazanan_sayisi}"
+        else:
+            embed.description = f"**Sona Erme:** <t:{timestamp}:R>\n**Düzenleyen:** {interaction.user.mention}\n**Kazanan Sayısı:** {kazanan_sayisi}"
+        
+        await interaction.response.send_message("Çekiliş başarıyla başlatıldı!", ephemeral=True)
+        mesaj = await interaction.channel.send(content="🎉 **ÇEKİLİŞ BAŞLADI** 🎉", embed=embed)
+
+        view = CekilisKatilView(embed, mesaj)
+        await mesaj.edit(view=view)
+
+        await asyncio.sleep(saniye)
+
+        try:
+            guncel_mesaj = await interaction.channel.fetch_message(mesaj.id)
+        except:
+            guncel_mesaj = mesaj
+
+        katilimcilar_listesi = list(view.katilimcilar)
+
+        if len(katilimcilar_listesi) == 0:
+            sonuc_embed = discord.Embed(title=f"🎉 {self.odul.value}", description=f"Yeterli katılım olmadığı için çekiliş iptal edildi.\n\n**Düzenleyen:** {interaction.user.mention}", color=discord.Color.red())
+            await guncel_mesaj.edit(content="🎉 **ÇEKİLİŞ BİTTİ** 🎉", embed=sonuc_embed, view=None)
+            return
+
+        kazananlar_id = random.sample(katilimcilar_listesi, min(kazanan_sayisi, len(katilimcilar_listesi)))
+        kazananlar_mention = ", ".join([f"<@{uid}>" for uid in kazananlar_id])
+
+        sonuc_embed = discord.Embed(title=f"🎉 {self.odul.value}", color=discord.Color.dark_theme())
+        if self.aciklama.value:
+            sonuc_embed.description = f"{self.aciklama.value}\n\nSona Erdi: <t:{timestamp}:f>\nDüzenleyen: {interaction.user.mention}\nKatılım: **{len(katilimcilar_listesi)}**\nKazananlar: {kazananlar_mention}"
+        else:
+            sonuc_embed.description = f"Sona Erdi: <t:{timestamp}:f>\nDüzenleyen: {interaction.user.mention}\nKatılım: **{len(katilimcilar_listesi)}**\nKazananlar: {kazananlar_mention}"
+
+        await guncel_mesaj.edit(content="🎉 **ÇEKİLİŞ BİTTİ** 🎉", embed=sonuc_embed, view=None)
+        await interaction.channel.send(f"Tebrikler {kazananlar_mention}! **{self.odul.value}** kazandınız!")
+
+class CekilisSetupView(discord.ui.View):
+    @discord.ui.button(label="Çekilişi Ayarla", style=discord.ButtonStyle.green)
+    async def ayarla(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Bu butonu kullanmaya yetkin yok!", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(CekilisModal())
+
+# --- SUNUCU BİLGİ KOMUTU ---
+@bot.command()
+async def sunucu(ctx):
+    guild = ctx.guild
+    yazi_kanali = len(guild.text_channels)
+    ses_kanali = len(guild.voice_channels)
+    kategori_sayisi = len(guild.categories)
+    toplam_kanal = len(guild.channels)
+    kurulus_tarihi = guild.created_at.strftime("%d/%m/%Y")
+    
+    embed = discord.Embed(
+        title=f"{guild.name} | Sunucu Bilgileri",
+        description=(
+            f"👑 **Sunucu Sahibi**\n{guild.owner.mention}\n\n"
+            f"🆔 **Sunucu ID**\n{guild.id}\n\n"
+            f"📅 **Oluşturulma Tarihi**\n{kurulus_tarihi}\n\n"
+            f"📜 **Kanal Sayısı** [{toplam_kanal}]\n"
+            f"{yazi_kanali} Yazı | {ses_kanali} Ses | {kategori_sayisi} Kategori\n\n"
+            f"👥 **Üye Sayısı**\n{guild.member_count:,}\n\n"
+            f"🌹 **Rol Sayısı**\n{len(guild.roles)}\n\n"
+            f"🟣 **Boost sayısı**\n{guild.premium_subscription_count}"
+        ),
+        color=discord.Color.dark_embed()
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    embed.set_footer(text=f"Requested by {ctx.author.name} • bugün saat {datetime.now().strftime('%H:%M')}")
+    await ctx.send(embed=embed)
+
+# --- DAVET SİSTEMİ OLAYLARI VE KOMUTLARI ---
+@bot.event
+async def on_member_join(member):
+    try:
+        for invite in await member.guild.invites():
+            if member.id in invite_cache and invite_cache[member.id] < invite.uses:
+                inviter = invite.inviter
+                if inviter:
+                    conn = sqlite3.connect('davetler.db')
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT joins FROM davet_loglari WHERE user_id = ?', (inviter.id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute('UPDATE davet_loglari SET joins = joins + 1 WHERE user_id = ?', (inviter.id,))
+                    else:
+                        cursor.execute('INSERT INTO davet_loglari (user_id, joins) VALUES (?, 1)', (inviter.id,))
+                    conn.commit()
+                    conn.close()
+                break
+        for invite in await member.guild.invites():
+            invite_cache[invite.code] = invite.uses
+    except Exception as e:
+        print(f"Join davet hatası: {e}")
+
+@bot.event
+async def on_member_remove(member):
+    try:
+        conn = sqlite3.connect('davetler.db')
+        cursor = conn.cursor()
+        cursor.execute('UPDATE davet_loglari SET lefts = lefts + 1 WHERE user_id = ?', (member.id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Remove davet hatası: {e}")
+
+@bot.command(name="i")
+async def invite_bak(ctx, member: discord.Member = None):
+    hedef = member or ctx.author
+    try:
+        conn = sqlite3.connect('davetler.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT joins, lefts, fakes, rejoins FROM davet_loglari WHERE user_id = ?', (hedef.id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        joins = row[0] if row else 0
+        lefts = row[1] if row else 0
+        fakes = row[2] if row else 0
+        rejoins = row[3] if row else 0
+
+        embed = discord.Embed(
+            title="Invite log",
+            description=f"≫ {hedef.mention} has **{joins}** invites",
+            color=discord.Color.blurple()
+        )
+        
+        embed.add_field(name="Joins", value=str(joins), inline=False)
+        embed.add_field(name="Left", value=str(lefts), inline=False)
+        embed.add_field(name="Fake", value=str(fakes), inline=False)
+        embed.add_field(name="Rejoins", value=f"{rejoins} (7d)", inline=False)
+        
+        if hedef.display_avatar:
+            embed.set_thumbnail(url=hedef.display_avatar.url)
+            
+        embed.set_footer(text=f"Requested by {ctx.author.name} • bugün saat {datetime.now().strftime('%H:%M')}")
+        
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ Davet bilgileri okunurken hata oluştu: {e}")
+
+@bot.command(name="ireset")
+async def invite_reset(ctx):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+
+    try:
+        conn = sqlite3.connect('davetler.db')
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM davet_loglari')
+        conn.commit()
+        conn.close()
+        await ctx.send("🔄 Sunucudaki tüm davet istatistikleri ve logları başarıyla sıfırlandı!")
+    except Exception as e:
+        await ctx.send(f"❌ Davetler sıfırlanırken hata oluştu: {e}")
+
+# --- SES KANALI KOMUTLARI ---
+@bot.command()
+async def bağlan(ctx):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+
+    if ctx.author.voice:
+        channel = ctx.author.voice.channel
+        if ctx.voice_client:
+            await ctx.voice_client.move_to(channel)
+        else:
+            await channel.connect()
+        await ctx.send(f"🔊 Ses kanalına katıldım: **{channel.name}**", delete_after=5)
+    else:
+        await ctx.send("❌ Önce bir ses kanalına girmelisin!", delete_after=5)
+
+@bot.command()
+async def ayrıl(ctx):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("👋 Ses kanalından ayrıldım.", delete_after=5)
+    else:
+        await ctx.send("❌ Zaten bir ses kanalında değilim!", delete_after=5)
+
+# --- DİĞER KOMUTLAR ---
+@bot.command()
+async def ticket_kur(ctx):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+    embed = discord.Embed(
+        title="Bilet Oluştur",
+        description="Ticket açmak için aşağıdaki **Seçim yap** menüsünden uygun kategoriyi seçin.",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed, view=TicketSelectView())
+
+@bot.command()
+async def çekiliş(ctx):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+    await ctx.send("Çekiliş detaylarını girmek için aşağıdaki butona tıklayın.", view=CekilisSetupView(), delete_after=30)
+
+@bot.command()
+async def sil(ctx, miktar: int = None):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+    if miktar is None or miktar <= 0 or miktar > 100:
+        await ctx.send("❌ Lütfen 1 ile 100 arasında bir sayı girin.", delete_after=5)
+        return
+    deleted = await ctx.channel.purge(limit=miktar + 1)
+    embed = discord.Embed(description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.", color=discord.Color.green())
+    await ctx.send(embed=embed, delete_after=4)
+
+# --- BOT OLAYLARI & YAPAY ZEKA / KANAL SİSTEMİ ---
+@bot.event
+async def on_ready():
+    bot.add_view(TicketSelectView())
+    bot.add_view(CekilisKatilView())
+    bot.add_view(TicketKapatView())
+    
+    for guild in bot.guilds:
+        try:
+            for invite in await guild.invites():
+                invite_cache[invite.code] = invite.uses
+        except:
+            pass
+
+    print(f'Bot başarıyla giriş yaptı: {bot.user.name}')
+    await bot.change_presence(activity=discord.Game(name="!yardım | WinterFall"))
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. YZ SİSTEMİ: 
-    # A) Etiketlenirse HER YERDE cevap verir.
-    # B) 'AÇIK TICKETLAR' kategorisindeyse ETİKETLEMEDEN cevap verir.
+    # 1. YAPAY ZEKA SİSTEMİ: Etiketlenirse veya AÇIK TICKETLAR kategorisindeyse otomatik cevap ver
     if bot.user.mentioned_in(message) or is_ticket_channel(message.channel):
         temiz_mesaj = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if temiz_mesaj:
             async with message.channel.typing():
                 try:
-                    # Gemini 2.0 Flash modeli kullanılıyor
                     response = ai_client.models.generate_content(
-                        model='gemini-2.0-flash', 
+                        model='gemini-2.0-flash',
                         contents=temiz_mesaj
                     )
                     await message.reply(response.text)
                 except Exception as e:
-                    await message.reply(f"❌ Yapay zeka asistanı şu an yanıt veremiyor: {e}")
+                    await message.reply(f"❌ Yapay zeka yanıt üretirken bir hata oluştu: {e}")
         return
 
-    # 2. DOĞAL DİLLE KANAL AÇMA (Yetkililer için)
-    if ("kanal" in message.content.lower()) and ("aç" in message.content.lower() or "oluş" in message.content.lower()):
-        # Burada yetkili kontrol fonksiyonunu çağırabilirsin
-        isim = message.content.lower().replace("kanal", "").replace("aç", "").replace("oluştur", "").strip() or "yeni-kanal"
-        if "ses" in message.content.lower():
-            await message.guild.create_voice_channel(name=isim)
-        else:
-            await message.guild.create_text_channel(name=isim)
-        await message.reply(f"✅ **{isim}** başarıyla oluşturuldu.")
-        return
+    # 2. DOĞAL DİLLE KANAL OLUŞTURMA MANTIĞI
+    icerik = message.content.lower()
+    if ("kanal" in icerik or "kanalı" in icerik) and ("oluş" in icerik or "aç" in icerik):
+        if yetkili_mi_kontrol_etmek(message.author, message.guild):
+            temiz_isim = message.content.replace("oluşturur musun", "").replace("oluştur", "").replace("açarmısın", "").replace("açır mısın", "").replace("aç", "").replace("adında", "").replace("isimli", "").replace("kanal", "").replace("kanalı", "").replace("kur", "").strip()
+            
+            if not temiz_isim:
+                temiz_isim = "yeni-kanal"
+
+            try:
+                if "ses" in icerik:
+                    yeni_kanal = await message.guild.create_voice_channel(name=temiz_isim)
+                    await message.reply(f"✅ Hemen oluşturuyorum! Ses kanalınız açıldı: **{yeni_kanal.name}**")
+                else:
+                    yeni_kanal = await message.guild.create_text_channel(name=temiz_isim)
+                    await message.reply(f"✅ Hemen oluşturuyorum! Yazı kanalınız açıldı: {yeni_kanal.mention}")
+            except Exception as e:
+                await message.reply(f"❌ Kanal oluşturulurken hata oluştu: {e}")
+            return
 
     await bot.process_commands(message)
 
 # --- BAŞLATMA ---
 if __name__ == '__main__':
-    threading.Thread(target=run_flask).start()
+    server_thread = threading.Thread(target=run_flask)
+    server_thread.start()
+    
     token = os.environ.get('BOT_TOKEN')
     if token:
         bot.run(token)

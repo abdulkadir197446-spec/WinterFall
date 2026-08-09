@@ -1,4 +1,5 @@
 import os
+import asyncio
 import threading
 from flask import Flask
 import discord
@@ -22,6 +23,34 @@ intents.presences = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
+# --- EKİP ALIM BAŞVURU FORMU (MODAL) ---
+class EkipAlimFormu(discord.ui.Modal, title="Ekip Alım Başvuru Formu"):
+    eski_ekip = discord.ui.TextInput(
+        label="Eski ekibin?",
+        placeholder="Örn: Vanguard",
+        style=discord.TextStyle.short,
+        required=True
+    )
+    sunucu = discord.ui.TextInput(
+        label="Hangi sunucuda oynuyorsun?",
+        placeholder="Örn: CraftRise",
+        style=discord.TextStyle.short,
+        required=True
+    )
+    oyun_ici_isim = discord.ui.TextInput(
+        label="Oyun içi ismin ne?",
+        placeholder="Örn: Steve",
+        style=discord.TextStyle.short,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await olustur_ticket_kanali(interaction, "Ekip Alım", {
+            "Eski Ekibi": self.eski_ekip.value,
+            "Oynadığı Sunucu": self.sunucu.value,
+            "Oyun İçi İsmi": self.oyun_ici_isim.value
+        })
+
 # --- TICKET KAPATMA BUTONU ---
 class TicketKapatView(discord.ui.View):
     def __init__(self):
@@ -29,16 +58,80 @@ class TicketKapatView(discord.ui.View):
 
     @discord.ui.button(label="🔒 Desteği Kapat", style=discord.ButtonStyle.red, custom_id="close_ticket")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Kapatma Butonu Yetki Kontrolü
+        kullanici_rolleri = [role.name for role in interaction.user.roles]
+        yetkili_mi = interaction.user.id == interaction.guild.owner_id or "Ticket Yetkili" in kullanici_rolleri
+
+        if not yetkili_mi:
+            await interaction.response.send_message("❌ Desteği sadece **Ticket Yetkili** rolüne sahip kişiler kapatabilir!", ephemeral=True)
+            return
+
         await interaction.response.send_message("Destek kanalı 5 saniye içinde siliniyor...", ephemeral=True)
-        import asyncio
         await asyncio.sleep(5)
         await interaction.channel.delete()
+
+# --- ORTAK TICKET OLUŞTURMA FONKSİYONU ---
+async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_kategori: str, form_verileri: dict = None):
+    guild = interaction.guild
+    member = interaction.user
+
+    # Tek Ticket Kontrolü (Herhangi bir kategoride açık ticket var mı?)
+    for channel in guild.channels:
+        if isinstance(channel, discord.TextChannel) and channel.name.endswith(f"-{member.name.lower()}"):
+            await interaction.response.send_message(f"❌ Zaten açık bir destek talebiniz bulunuyor: {channel.mention}", ephemeral=True)
+            return
+
+    kategori_adi = "AÇIK TICKETLAR"
+    category = discord.utils.get(guild.categories, name=kategori_adi)
+    if not category:
+        category = await guild.create_category(kategori_adi)
+
+    # Rol İzinleri Aynen Ayarlanıyor
+    ticket_yetkili_rol = discord.utils.get(guild.roles, name="Ticket Yetkili")
+
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    }
+
+    if ticket_yetkili_rol:
+        overwrites[ticket_yetkili_rol] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+    kanal_adi = f"{secilen_kategori.lower().replace(' ', '-')}-{member.name.lower()}"
+
+    ticket_channel = await guild.create_text_channel(
+        name=kanal_adi,
+        category=category,
+        overwrites=overwrites
+    )
+
+    embed = discord.Embed(
+        title=f"🎫 {secilen_kategori} Talebi Açıldı",
+        description=f"Merhaba {member.mention}, yetkililer en kısa sürede sizinle ilgilenecektir.\n\nDesteği kapatmak için aşağıdaki **Desteği Kapat** butonuna basabilirsiniz.",
+        color=discord.Color.blue()
+    )
+
+    # Eğer form doldurulduysa cevapları kart içerisine ekle
+    if form_verileri:
+        for baslik, cevap in form_verileri.items():
+            embed.add_field(name=f"📌 {baslik}", value=f"```\n{cevap}\n```", inline=False)
+
+    # Ticket Yetkili Etiketleme Mesajı
+    etiket_metni = f"{member.mention} | "
+    if ticket_yetkili_rol:
+        etiket_metni += f"{ticket_yetkili_rol.mention}"
+    else:
+        etiket_metni += "**Ticket Yetkili**"
+
+    await ticket_channel.send(content=etiket_metni, embed=embed, view=TicketKapatView())
+    await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
 
 # --- AÇILIR MENÜ (SELECT MENU) ---
 class TicketSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="Ekip Alım", emoji="👤", description="Ekip başvurusu için ticket açar."),
+            discord.SelectOption(label="Ekip Alım", emoji="👤", description="Ekip başvurusu için form doldurun."),
             discord.SelectOption(label="Merge", emoji="🔗", description="Merge işlemleri için ticket açar."),
             discord.SelectOption(label="Partnerlik", emoji="💖", description="Partnerlik görüşmeleri için ticket açar."),
             discord.SelectOption(label="Ally", emoji="⚔️", description="Müttefiklik (Ally) için ticket açar."),
@@ -47,41 +140,12 @@ class TicketSelect(discord.ui.Select):
         super().__init__(placeholder="Seçim yap", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu")
 
     async def callback(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        member = interaction.user
         secilen_kategori = self.values[0]
 
-        kanal_adi = f"{secilen_kategori.lower().replace(' ', '-')}-{member.name.lower()}"
-
-        existing_channel = discord.utils.get(guild.channels, name=kanal_adi)
-        if existing_channel:
-            await interaction.response.send_message(f"Zaten açık bir **{secilen_kategori}** talebiniz var: {existing_channel.mention}", ephemeral=True)
-            return
-
-        kategori_adi = "AÇIK TICKETLAR"
-        category = discord.utils.get(guild.categories, name=kategori_adi)
-        if not category:
-            category = await guild.create_category(kategori_adi)
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-
-        ticket_channel = await guild.create_text_channel(
-            name=kanal_adi,
-            category=category,
-            overwrites=overwrites
-        )
-
-        embed = discord.Embed(
-            title=f"🎫 {secilen_kategori} Talebi Açıldı",
-            description=f"Merhaba {member.mention}, yetkililer en kısa sürede sizinle ilgilenecektir.\n\nDesteği kapatmak için aşağıdaki **Desteği Kapat** butonuna basabilirsiniz.",
-            color=discord.Color.blue()
-        )
-        await ticket_channel.send(embed=embed, view=TicketKapatView())
-        await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+        if secilen_kategori == "Ekip Alım":
+            await interaction.response.send_modal(EkipAlimFormu())
+        else:
+            await olustur_ticket_kanali(interaction, secilen_kategori)
 
 class TicketSelectView(discord.ui.View):
     def __init__(self):

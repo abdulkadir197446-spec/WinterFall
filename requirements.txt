@@ -3,3 +3,4 @@ Flask
 groq
 PyNaCl
 davey
+gTTS

@@ -426,6 +426,24 @@ async def baglan(interaction: discord.Interaction):
         await interaction.response.send_message("❌ Bu komutu sadece yetkililer kullanabilir!", ephemeral=True)
         return
 
+    if not interaction.user.voice:
+        await interaction.response.send_message("❌ Önce bir ses kanalına girmelisin!", ephemeral=True)
+        return
+
+    # Discord zaman aşımını önlemek için defer ekliyoruz
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        channel = interaction.user.voice.channel
+        if interaction.guild.voice_client:
+            await interaction.guild.voice_client.move_to(channel)
+        else:
+            await channel.connect()
+        await interaction.followup.send(f"🔊 Ses kanalına katıldım: **{channel.name}**", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Ses kanalına bağlanırken hata oluştu: {e}", ephemeral=True)
+        return
+
     if interaction.user.voice:
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client:

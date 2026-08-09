@@ -10,7 +10,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from groq import Groq  # Groq AI kütüphanesi
-from gtts import gTTS  # Ücretsiz Metinden Sese Çeviri (TTS)
+import pyttsx3  # gTTS yerine pyttsx3 (Sınırsız yerel TTS)
 
 # --- Groq AI Kurulumu ---
 ai_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -454,7 +454,7 @@ async def ayril(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("❌ Zaten bir ses kanalında değilim!", ephemeral=True)
 
-@bot.tree.command(name="konuş", description="Botun ses kanalında metni sesli okumasını sağlar (Yalnızca yetkili).")
+@bot.tree.command(name="konuş", description="Botun ses kanalında metni sesli okumasını sağlar (pyttsx3 - Sınırsız).")
 @app_commands.describe(mesaj="Botun sesli olarak söylemesini istediğin yazı")
 async def konus(interaction: discord.Interaction, mesaj: str):
     if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
@@ -468,15 +468,15 @@ async def konus(interaction: discord.Interaction, mesaj: str):
     await interaction.response.defer(ephemeral=True)
 
     try:
-        tts = gTTS(text=mesaj, lang='tr')
-        dosya_adi = "ses.mp3"
-        tts.save(dosya_adi)
+        engine = pyttsx3.init()
+        engine.save_to_file(mesaj, 'ses.mp3')
+        engine.runAndWait()
 
         voice_client = interaction.guild.voice_client
         if voice_client.is_playing():
             voice_client.stop()
 
-        audio_source = discord.FFmpegPCMAudio(dosya_adi)
+        audio_source = discord.FFmpegPCMAudio('ses.mp3')
         voice_client.play(audio_source)
 
         await interaction.followup.send(f"🗣️ Sesli okunuyor: *\"{mesaj}\*", ephemeral=True)

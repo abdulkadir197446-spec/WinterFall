@@ -316,8 +316,8 @@ async def sunucu(interaction: discord.Interaction):
     ses_kanali = len(guild.voice_channels)
     kategori_sayisi = len(guild.categories)
     
-    # Oluşturulma tarihi timestamp formatı (Discord'un yerel zaman damgası)
-     kuruldu_timestamp = int(guild.created_at.timestamp())
+    # Oluşturulma tarihi timestamp formatı
+    kuruldu_timestamp = int(guild.created_at.timestamp())
 
     embed = discord.Embed(
         title=f"❄️ {guild.name} | Sunucu Bilgileri",
@@ -576,3 +576,4 @@ if __name__ == '__main__':
     token = os.environ.get('BOT_TOKEN')
     if token: bot.run(token)
     else: print("HATA: BOT_TOKEN bulunamadı!")
+        

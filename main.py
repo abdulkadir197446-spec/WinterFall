@@ -56,7 +56,7 @@ invite_cache = {}
 
 # Yetkili Kontrol Fonksiyonu
 def yetkili_mi_kontrol_etmek(author, guild):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝙡𝙡 Yönetim"]
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡 Yönetim"]
     kullanici_rolleri = [role.name for role in author.roles]
     return author.id == guild.owner_id or any(r in kullanici_rolleri for r in kullanici_rolleri)
 
@@ -497,12 +497,12 @@ async def sil(ctx, miktar: int = None):
     embed = discord.Embed(description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.", color=discord.Color.green())
     await ctx.send(embed=embed, delete_after=4)
 
-# --- GROQ AI YANIT ÜRETME FONKSİYONU ---
+# --- GROQ AI YANIT ÜRETME FONKSİYONU (GÜNCEL MODEL) ---
 async def ai_yanit_uret(metin):
     try:
         chat_completion = ai_client.chat.completions.create(
             messages=[{"role": "user", "content": metin}],
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",  # Güncel ve aktif model
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
@@ -530,7 +530,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. YAPAY ZEKA SİSTEMİ (Groq - Llama 3): Etiketlenirse veya AÇIK TICKETLAR kategorisindeyse
+    # 1. YAPAY ZEKA SİSTEMİ (Groq - Llama 3.1): Etiketlenirse veya AÇIK TICKETLAR kategorisindeyse
     if bot.user.mentioned_in(message) or is_ticket_channel(message.channel):
         temiz_mesaj = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if temiz_mesaj:

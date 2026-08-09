@@ -2,7 +2,6 @@ import os
 import asyncio
 import threading
 import random
-import time
 import sqlite3
 from datetime import datetime, timezone
 from flask import Flask
@@ -524,7 +523,7 @@ async def on_message(message):
             try:
                 if "ses" in icerik:
                     yeni_kanal = await message.guild.create_voice_channel(name=temiz_isim)
-                    await message.channel.execute = await message.reply(f"✅ Hemen oluşturuyorum! Ses kanalınız açıldı: **{yeni_kanal.name}**")
+                    await message.reply(f"✅ Hemen oluşturuyorum! Ses kanalınız açıldı: **{yeni_kanal.name}**")
                 else:
                     yeni_kanal = await message.guild.create_text_channel(name=temiz_isim)
                     await message.reply(f"✅ Hemen oluşturuyorum! Yazı kanalınız açıldı: {yeni_kanal.mention}")

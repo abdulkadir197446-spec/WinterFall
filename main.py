@@ -466,6 +466,38 @@ if __name__ == '__main__':
     server_thread.start()
     
     token = os.environ.get('BOT_TOKEN')
+    @bot.command(name="yapaykanal")
+async def yapay_kanal_olustur(ctx, *, istek: str = None):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+
+    if not istek:
+        await ctx.send("❌ Lütfen ne tür bir kanal açmak istediğini yaz! Örnek: `!yapaykanal Winterfall Yapay Zeka adında ses kanalı aç`", delete_after=5)
+        return
+
+    # İstekte ses kelimesi geçiyorsa ses kanalı, geçmiyorsa yazı kanalı olarak algılatıyoruz (Kesin ve net mantık)
+    istek_kucuk = istek.lower()
+    
+    # Kanal adını ayıklama (Basit ve kusursuz bir algoritma)
+    # Örn: "Winterfall Yapay Zeka adında ses kanalı aç" -> "winterfall yapay zeka"
+    temiz_isim = istek.replace("adında", "").replace("named", "").replace("ses", "").replace("yazı", "").replace("kanalı", "").replace("kanalını", "").replace("aç", "").replace("oluştur", "").strip()
+    
+    if not temiz_isim:
+        temiz_isim = "yeni-kanal"
+
+    guild = ctx.guild
+    
+    try:
+        if "ses" in istek_kucuk:
+            yeni_kanal = await guild.create_voice_channel(name=temiz_isim)
+            await ctx.send(f"✅ Hemen oluşturuyorum! Ses kanalınız açıldı: **{yeni_kanal.name}**")
+        else:
+            yeni_kanal = await guild.create_text_channel(name=temiz_isim)
+            await ctx.send(f"✅ Hemen oluşturuyorum! Yazı kanalınız açıldı: {yeni_kanal.mention}")
+            
+    except Exception as e:
+        await ctx.send(f"❌ Kanal oluşturulurken bir hata oluştu: {e}")
     if token:
         bot.run(token)
     else:

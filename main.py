@@ -437,7 +437,6 @@ async def baglan(interaction: discord.Interaction):
         if interaction.guild.voice_client:
             await interaction.guild.voice_client.move_to(channel)
         else:
-            # self_deaf=True ile bot kulaklık kapatır ve ses kanalında çökmeden/atılmadan sınırsız kalır
             await channel.connect(self_deaf=True)
         await interaction.followup.send(f"🔊 Ses kanalına katıldım ve kalıcı olarak sabitlendim: **{channel.name}**", ephemeral=True)
     except Exception as e:

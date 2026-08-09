@@ -10,6 +10,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from groq import Groq  # Groq AI kütüphanesi
+from gtts import gTTS  # Ücretsiz Metinden Sese Çeviri (TTS)
 
 # --- Groq AI Kurulumu ---
 ai_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -37,7 +38,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "WinterFall Bot 7/24 Aktif! (Slash Komutları Devrede)"
+    return "WinterFall Bot 7/24 Aktif! (Slash Komutları ve Ses Sistemi Devrede)"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -50,7 +51,6 @@ intents.presences = True
 intents.guilds = True
 intents.invites = True
 
-# Slash komutları için prefix'in artık bir önemi yok ama zorunlu bir parametre
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 # Davetleri cache'lemek için sözlük
@@ -337,7 +337,7 @@ class CekilisSetupView(discord.ui.View):
         await interaction.response.send_modal(CekilisModal())
 
 # ==========================================
-# BÜTÜN KOMUTLAR (TAMAMI SLASH KOMUTUDUR)
+# BÜTÜN SLASH KOMUTLARI
 # ==========================================
 
 @bot.tree.command(name="sunucu", description="Sunucu hakkında detaylı bilgi gösterir.")
@@ -430,7 +430,6 @@ async def baglan(interaction: discord.Interaction):
         await interaction.response.send_message("❌ Önce bir ses kanalına girmelisin!", ephemeral=True)
         return
 
-    # Discord zaman aşımını önlemek için defer ekliyoruz
     await interaction.response.defer(ephemeral=True)
 
     try:
@@ -442,17 +441,6 @@ async def baglan(interaction: discord.Interaction):
         await interaction.followup.send(f"🔊 Ses kanalına katıldım: **{channel.name}**", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Ses kanalına bağlanırken hata oluştu: {e}", ephemeral=True)
-        return
-
-    if interaction.user.voice:
-        channel = interaction.user.voice.channel
-        if interaction.guild.voice_client:
-            await interaction.guild.voice_client.move_to(channel)
-        else:
-            await channel.connect()
-        await interaction.response.send_message(f"🔊 Ses kanalına katıldım: **{channel.name}**", ephemeral=True)
-    else:
-        await interaction.response.send_message("❌ Önce bir ses kanalına girmelisin!", ephemeral=True)
 
 @bot.tree.command(name="ayrıl", description="Botun ses kanalından çıkmasını sağlar (Yalnızca yetkili).")
 async def ayril(interaction: discord.Interaction):
@@ -465,6 +453,36 @@ async def ayril(interaction: discord.Interaction):
         await interaction.response.send_message("👋 Ses kanalından ayrıldım.", ephemeral=True)
     else:
         await interaction.response.send_message("❌ Zaten bir ses kanalında değilim!", ephemeral=True)
+
+@bot.tree.command(name="konuş", description="Botun ses kanalında metni sesli okumasını sağlar (Yalnızca yetkili).")
+@app_commands.describe(mesaj="Botun sesli olarak söylemesini istediğin yazı")
+async def konus(interaction: discord.Interaction, mesaj: str):
+    if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ Bu komutu sadece yetkililer kullanabilir!", ephemeral=True)
+        return
+
+    if not interaction.guild.voice_client:
+        await interaction.response.send_message("❌ Önce botu bir ses kanalına sokmalısın! (`/bağlan`)", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        # gTTS ile metni sese çevirip geçici dosya kaydediyoruz
+        tts = gTTS(text=mesaj, lang='tr')
+        dosya_adi = "ses.mp3"
+        tts.save(dosya_adi)
+
+        voice_client = interaction.guild.voice_client
+        if voice_client.is_playing():
+            voice_client.stop()
+
+        audio_source = discord.FFmpegPCMAudio(dosya_adi)
+        voice_client.play(audio_source)
+
+        await interaction.followup.send(f"🗣️ Sesli okunuyor: *\"{mesaj}\*", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Sesli okuma sırasında hata oluştu: {e}", ephemeral=True)
 
 @bot.tree.command(name="ticket_kur", description="Ticket menüsünü kurar (Yalnızca yetkili).")
 async def ticket_kur(interaction: discord.Interaction):
@@ -556,10 +574,9 @@ async def on_ready():
     bot.add_view(CekilisKatilView())
     bot.add_view(TicketKapatView())
     
-    # Tüm slash komutları Discord'a tanıtılıyor
     try:
         synced = await bot.tree.sync()
-        print(f"Slash komutları senkronize edildi: {len(synced)} komut aktif (/ ile kullanabilirsiniz).")
+        print(f"Slash komutları senkronize edildi: {len(synced)} komut aktif.")
     except Exception as e:
         print(f"Komut senkronizasyon hatası: {e}")
     
@@ -578,7 +595,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. YAPAY ZEKA SİSTEMİ (Etiketleme veya Ticket Kanalıysa)
+    # 1. YAPAY ZEKA SİSTEMİ
     if bot.user.mentioned_in(message) or is_ticket_channel(message.channel):
         temiz_mesaj = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if temiz_mesaj:
@@ -587,7 +604,7 @@ async def on_message(message):
                 await message.reply(cevap)
         return
 
-    # 2. DOĞAL DİLLE KANAL OLUŞTURMA MANTIĞI (Örn: "ses kanalı oluşturur musun")
+    # 2. DOĞAL DİLLE KANAL OLUŞTURMA MANTIĞI
     icerik = message.content.lower()
     if ("kanal" in icerik or "kanalı" in icerik) and ("oluş" in icerik or "aç" in icerik):
         if yetkili_mi_kontrol_etmek(message.author, message.guild):

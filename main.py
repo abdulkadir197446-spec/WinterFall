@@ -22,8 +22,16 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.presences = True
+intents.guilds = True
+intents.invites = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+
+# Yetkili Kontrol Fonksiyonu
+def yetkili_mi_kontrol(ctx):
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
+    kullanici_rolleri = [role.name for role in ctx.author.roles]
+    return ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
 # --- TICKET KAPATMA BUTONU ---
 class TicketKapatView(discord.ui.View):
@@ -275,14 +283,59 @@ class CekilisSetupView(discord.ui.View):
 
         await interaction.response.send_modal(CekilisModal())
 
+# --- KOMUTLAR (!sunucu, !i HERKES TARAFINDAN KULLANILABİLİR) ---
+
+@bot.command()
+async def sunucu(ctx):
+    guild = ctx.guild
+    embed = discord.Embed(title=f"📊 {guild.name} Sunucu Bilgileri", color=discord.Color.blue())
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    
+    embed.add_field(name="👑 Sunucu Sahibi", value=guild.owner.mention, inline=True)
+    embed.add_field(name="👥 Üye Sayısı", value=f"{guild.member_count} kişi", inline=True)
+    embed.add_field(name="💬 Kanal Sayısı", value=f"{len(guild.channels)} kanal", inline=True)
+    embed.add_field(name="🛡️ Rol Sayısı", value=f"{len(guild.roles)} rol", inline=True)
+    embed.add_field(name="📅 Kuruluş Tarihi", value=f"<t:{int(guild.created_at.timestamp())}:R>", inline=True)
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name="i")
+async def invite_bak(ctx, member: discord.Member = None):
+    hedef = member or ctx.author
+    try:
+        invites = await ctx.guild.invites()
+        total_invites = 0
+        for invite in invites:
+            if invite.inviter and invite.inviter.id == hedef.id:
+                total_invites += invite.uses
+        
+        await ctx.send(f"📌 **{hedef.name}** adlı kullanıcının toplam **{total_invites}** daveti bulunuyor.")
+    except Exception as e:
+        await ctx.send(f"❌ Davet bilgileri okunurken bir hata oluştu (Botun 'Manage Server' yetkisi olduğundan emin olun).")
+
+# --- !ireset SADECE YETKİLİLER TARAFINDAN KULLANILABİLİR ---
+@bot.command(name="ireset")
+async def invite_reset(ctx):
+    if not yetkili_mi_kontrol(ctx):
+        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
+        return
+
+    try:
+        invites = await ctx.guild.invites()
+        for invite in invites:
+            try:
+                await invite.delete()
+            except:
+                pass
+        await ctx.send("🔄 Sunucudaki tüm davet linkleri sıfırlandı/silindi!")
+    except Exception as e:
+        await ctx.send(f"❌ Davetler sıfırlanırken hata oluştu: {e}")
+
 # --- SES KANALI KOMUTLARI ---
 @bot.command()
 async def bağlan(ctx):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
-    kullanici_rolleri = [role.name for role in ctx.author.roles]
-    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
-
-    if not yetkili_mi:
+    if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
 
@@ -298,11 +351,7 @@ async def bağlan(ctx):
 
 @bot.command()
 async def ayrıl(ctx):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
-    kullanici_rolleri = [role.name for role in ctx.author.roles]
-    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
-
-    if not yetkili_mi:
+    if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
 
@@ -315,11 +364,7 @@ async def ayrıl(ctx):
 # --- DİĞER KOMUTLAR ---
 @bot.command()
 async def ticket_kur(ctx):
-    izinli_roller = ["𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"]
-    kullanici_rolleri = [role.name for role in ctx.author.roles]
-    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
-
-    if not yetkili_mi:
+    if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
 
@@ -337,11 +382,7 @@ async def ticket_kur(ctx):
 
 @bot.command()
 async def çekiliş(ctx):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
-    kullanici_rolleri = [role.name for role in ctx.author.roles]
-    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
-
-    if not yetkili_mi:
+    if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
 
@@ -354,11 +395,7 @@ async def çekiliş(ctx):
 
 @bot.command()
 async def sil(ctx, miktar: int = None):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
-    kullanici_rolleri = [role.name for role in ctx.author.roles]
-    yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
-
-    if not yetkili_mi:
+    if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
 

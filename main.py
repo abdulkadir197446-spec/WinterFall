@@ -3,10 +3,29 @@ import asyncio
 import threading
 import random
 import time
+import sqlite3
 from datetime import datetime, timezone
 from flask import Flask
 import discord
 from discord.ext import commands
+
+# --- Veritabanı (SQLite) Kurulumu (Davetler İçin) ---
+def veritabani_kur():
+    conn = sqlite3.connect('davetler.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS davet_loglari (
+            user_id INTEGER PRIMARY KEY,
+            joins INTEGER DEFAULT 0,
+            lefts INTEGER DEFAULT 0,
+            fakes INTEGER DEFAULT 0,
+            rejoins INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+veritabani_kur()
 
 # --- Render İçin Web Sunucusu ---
 app = Flask('')
@@ -28,11 +47,17 @@ intents.invites = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
+# Davetleri cache'lemek için sözlük
+invite_cache = {}
+
 # Yetkili Kontrol Fonksiyonu
-def yetkili_mi_kontrol(ctx):
+def yetkili_mi_kontrol_etmek(author, guild):
     izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
-    kullanici_rolleri = [role.name for role in ctx.author.roles]
-    return ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
+    kullanici_rolleri = [role.name for role in author.roles]
+    return author.id == guild.owner_id or any(r in kullanici_rolleri for r in kullanici_rolleri)
+
+def yetkili_mi_kontrol(ctx):
+    return yetkili_mi_kontrol_etmek(ctx.author, ctx.guild)
 
 # --- TICKET KAPATMA BUTONU ---
 class TicketKapatView(discord.ui.View):
@@ -274,29 +299,20 @@ class CekilisModal(discord.ui.Modal, title="Çekiliş Oluştur"):
 class CekilisSetupView(discord.ui.View):
     @discord.ui.button(label="Çekilişi Ayarla", style=discord.ButtonStyle.green)
     async def ayarla(self, interaction: discord.Interaction, button: discord.ui.Button):
-        izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
-        kullanici_rolleri = [role.name for role in interaction.user.roles]
-        yetkili_mi = interaction.user.id == interaction.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
-
-        if not yetkili_mi:
+        if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
             await interaction.response.send_message("❌ Bu butonu kullanmaya yetkin yok!", ephemeral=True)
             return
 
         await interaction.response.send_modal(CekilisModal())
 
-# --- KOMUTLAR (!sunucu, !i HERKES TARAFINDAN KULLANILABİLİR) ---
-
+# --- SUNUCU BİLGİ KOMUTU ---
 @bot.command()
 async def sunucu(ctx):
     guild = ctx.guild
-    
-    # Kanal sayılarını hesaplama
     yazi_kanali = len(guild.text_channels)
     ses_kanali = len(guild.voice_channels)
     kategori_sayisi = len(guild.categories)
     toplam_kanal = len(guild.channels)
-    
-    # Kurulum tarihi formatı (GG.AA.YYYY veya Discord timestamp)
     kurulus_tarihi = guild.created_at.strftime("%d/%m/%Y")
     
     embed = discord.Embed(
@@ -313,35 +329,71 @@ async def sunucu(ctx):
         ),
         color=discord.Color.dark_embed()
     )
-    
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-        
     embed.set_footer(text=f"Requested by {ctx.author.name} • bugün saat {datetime.now().strftime('%H:%M')}")
-    
     await ctx.send(embed=embed)
+
+# --- DAVET SİSTEMİ OLAYLARI VE KOMUTLARI ---
+@bot.event
+async def on_member_join(member):
+    try:
+        for invite in await member.guild.invites():
+            if member.id in invite_cache and invite_cache[member.id] < invite.uses:
+                inviter = invite.inviter
+                if inviter:
+                    conn = sqlite3.connect('davetler.db')
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT joins FROM davet_loglari WHERE user_id = ?', (inviter.id,))
+                    row = cursor.fetchone()
+                    if row:
+                        cursor.execute('UPDATE davet_loglari SET joins = joins + 1 WHERE user_id = ?', (inviter.id,))
+                    else:
+                        cursor.execute('INSERT INTO davet_loglari (user_id, joins) VALUES (?, 1)', (inviter.id,))
+                    conn.commit()
+                    conn.close()
+                break
+        for invite in await member.guild.invites():
+            invite_cache[invite.code] = invite.uses
+    except Exception as e:
+        print(f"Join davet hatası: {e}")
+
+@bot.event
+async def on_member_remove(member):
+    try:
+        conn = sqlite3.connect('davetler.db')
+        cursor = conn.cursor()
+        cursor.execute('UPDATE davet_loglari SET lefts = lefts + 1 WHERE user_id = ?', (member.id,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Remove davet hatası: {e}")
 
 @bot.command(name="i")
 async def invite_bak(ctx, member: discord.Member = None):
     hedef = member or ctx.author
     try:
-        invites = await ctx.guild.invites()
-        toplam_davet = 0
-        
-        for invite in invites:
-            if invite.inviter and invite.inviter.id == hedef.id:
-                toplam_davet += invite.uses
-        
+        conn = sqlite3.connect('davetler.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT joins, lefts, fakes, rejoins FROM davet_loglari WHERE user_id = ?', (hedef.id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        joins = row[0] if row else 0
+        lefts = row[1] if row else 0
+        fakes = row[2] if row else 0
+        rejoins = row[3] if row else 0
+
         embed = discord.Embed(
             title="Invite log",
-            description=f"≫ {hedef.mention} has **{toplam_davet}** invites",
+            description=f"≫ {hedef.mention} has **{joins}** invites",
             color=discord.Color.blurple()
         )
         
-        embed.add_field(name="Joins", value="3", inline=False)
-        embed.add_field(name="Left", value="3", inline=False)
-        embed.add_field(name="Fake", value="0", inline=False)
-        embed.add_field(name="Rejoins", value="3 (7d)", inline=False)
+        embed.add_field(name="Joins", value=str(joins), inline=False)
+        embed.add_field(name="Left", value=str(lefts), inline=False)
+        embed.add_field(name="Fake", value=str(fakes), inline=False)
+        embed.add_field(name="Rejoins", value=f"{rejoins} (7d)", inline=False)
         
         if hedef.display_avatar:
             embed.set_thumbnail(url=hedef.display_avatar.url)
@@ -350,9 +402,8 @@ async def invite_bak(ctx, member: discord.Member = None):
         
         await ctx.send(embed=embed)
     except Exception as e:
-        await ctx.send(f"❌ Davet bilgileri okunurken hata oluştu (Botun 'Manage Server' yetkisi olduğundan emin olun).")
+        await ctx.send(f"❌ Davet bilgileri okunurken hata oluştu: {e}")
 
-# --- !ireset SADECE YETKİLİLER TARAFINDAN KULLANILABİLİR ---
 @bot.command(name="ireset")
 async def invite_reset(ctx):
     if not yetkili_mi_kontrol(ctx):
@@ -360,13 +411,12 @@ async def invite_reset(ctx):
         return
 
     try:
-        invites = await ctx.guild.invites()
-        for invite in invites:
-            try:
-                await invite.delete()
-            except:
-                pass
-        await ctx.send("🔄 Sunucudaki tüm davet linkleri sıfırlandı/silindi!")
+        conn = sqlite3.connect('davetler.db')
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM davet_loglari')
+        conn.commit()
+        conn.close()
+        await ctx.send("🔄 Sunucudaki tüm davet istatistikleri ve logları başarıyla sıfırlandı!")
     except Exception as e:
         await ctx.send(f"❌ Davetler sıfırlanırken hata oluştu: {e}")
 
@@ -405,12 +455,10 @@ async def ticket_kur(ctx):
     if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
-
     try:
         await ctx.message.delete()
     except:
         pass
-
     embed = discord.Embed(
         title="Bilet Oluştur",
         description="Ticket açmak için aşağıdaki **Seçim yap** menüsünden uygun kategoriyi seçin.",
@@ -423,12 +471,10 @@ async def çekiliş(ctx):
     if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
-
     try:
         await ctx.message.delete()
     except:
         pass
-
     await ctx.send("Çekiliş detaylarını girmek için aşağıdaki butona tıklayın.", view=CekilisSetupView(), delete_after=30)
 
 @bot.command()
@@ -436,21 +482,27 @@ async def sil(ctx, miktar: int = None):
     if not yetkili_mi_kontrol(ctx):
         await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
         return
-
     if miktar is None or miktar <= 0 or miktar > 100:
         await ctx.send("❌ Lütfen 1 ile 100 arasında bir sayı girin.", delete_after=5)
         return
-
     deleted = await ctx.channel.purge(limit=miktar + 1)
     embed = discord.Embed(description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.", color=discord.Color.green())
     await ctx.send(embed=embed, delete_after=4)
 
-# --- BOT OLAYLARI ---
+# --- BOT OLAYLARI & DOĞAL DİL / YAPAY ZEKA KANAL SİSTEMİ ---
 @bot.event
 async def on_ready():
     bot.add_view(TicketSelectView())
     bot.add_view(CekilisKatilView())
     bot.add_view(TicketKapatView())
+    
+    for guild in bot.guilds:
+        try:
+            for invite in await guild.invites():
+                invite_cache[invite.code] = invite.uses
+        except:
+            pass
+
     print(f'Bot başarıyla giriş yaptı: {bot.user.name}')
     await bot.change_presence(activity=discord.Game(name="!yardım | WinterFall"))
 
@@ -458,6 +510,28 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
+
+    # Doğal Dille Kanal Oluşturma Mantığı
+    icerik = message.content.lower()
+    if ("kanal" in icerik or "kanalı" in icerik) and ("oluş" in icerik or "aç" in icerik):
+        # Yetkili kontrolü
+        if yetkili_mi_kontrol_etmek(message.author, message.guild):
+            temiz_isim = message.content.replace("oluşturur musun", "").replace("oluştur", "").replace("açarmısın", "").replace("açır mısın", "").replace("aç", "").replace("adında", "").replace("isimli", "").replace("kanal", "").replace("kanalı", "").replace("kur", "").strip()
+            
+            if not temiz_isim:
+                temiz_isim = "yeni-kanal"
+
+            try:
+                if "ses" in icerik:
+                    yeni_kanal = await message.guild.create_voice_channel(name=temiz_isim)
+                    await message.channel.execute = await message.reply(f"✅ Hemen oluşturuyorum! Ses kanalınız açıldı: **{yeni_kanal.name}**")
+                else:
+                    yeni_kanal = await message.guild.create_text_channel(name=temiz_isim)
+                    await message.reply(f"✅ Hemen oluşturuyorum! Yazı kanalınız açıldı: {yeni_kanal.mention}")
+            except Exception as e:
+                await message.reply(f"❌ Kanal oluşturulurken hata oluştu: {e}")
+            return
+
     await bot.process_commands(message)
 
 # --- BAŞLATMA ---
@@ -466,38 +540,6 @@ if __name__ == '__main__':
     server_thread.start()
     
     token = os.environ.get('BOT_TOKEN')
-    @bot.command(name="yapaykanal")
-async def yapay_kanal_olustur(ctx, *, istek: str = None):
-    if not yetkili_mi_kontrol(ctx):
-        await ctx.send("❌ Bu komutu sadece yetkililer kullanabilir!", delete_after=5)
-        return
-
-    if not istek:
-        await ctx.send("❌ Lütfen ne tür bir kanal açmak istediğini yaz! Örnek: `!yapaykanal Winterfall Yapay Zeka adında ses kanalı aç`", delete_after=5)
-        return
-
-    # İstekte ses kelimesi geçiyorsa ses kanalı, geçmiyorsa yazı kanalı olarak algılatıyoruz (Kesin ve net mantık)
-    istek_kucuk = istek.lower()
-    
-    # Kanal adını ayıklama (Basit ve kusursuz bir algoritma)
-    # Örn: "Winterfall Yapay Zeka adında ses kanalı aç" -> "winterfall yapay zeka"
-    temiz_isim = istek.replace("adında", "").replace("named", "").replace("ses", "").replace("yazı", "").replace("kanalı", "").replace("kanalını", "").replace("aç", "").replace("oluştur", "").strip()
-    
-    if not temiz_isim:
-        temiz_isim = "yeni-kanal"
-
-    guild = ctx.guild
-    
-    try:
-        if "ses" in istek_kucuk:
-            yeni_kanal = await guild.create_voice_channel(name=temiz_isim)
-            await ctx.send(f"✅ Hemen oluşturuyorum! Ses kanalınız açıldı: **{yeni_kanal.name}**")
-        else:
-            yeni_kanal = await guild.create_text_channel(name=temiz_isim)
-            await ctx.send(f"✅ Hemen oluşturuyorum! Yazı kanalınız açıldı: {yeni_kanal.mention}")
-            
-    except Exception as e:
-        await ctx.send(f"❌ Kanal oluşturulurken bir hata oluştu: {e}")
     if token:
         bot.run(token)
     else:

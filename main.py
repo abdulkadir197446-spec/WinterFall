@@ -57,7 +57,7 @@ invite_cache = {}
 
 # Yetkili Kontrol Fonksiyonu
 def yetkili_mi_kontrol_etmek(author, guild):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡 Yönetim"]
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡 Yönetim"]
     kullanici_rolleri = [role.name for role in author.roles]
     return author.id == guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
@@ -425,6 +425,35 @@ async def sesat(interaction: discord.Interaction, member: discord.Member):
         await interaction.response.send_message(f"🥾 **{member.display_name}** sesten atıldı!", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ Hata: {e}", ephemeral=True)
+
+@bot.tree.command(name="kilitle", description="Bulunulan kanalı üyeler için kilitler veya açar.")
+@app_commands.describe(durum="Açmak için 'ac', kapatmak için 'kapat' yazın.")
+@app_commands.choices(durum=[
+    app_commands.Choice(name="Kapat (Kilitle)", value="kapat"),
+    app_commands.Choice(name="Aç (Kilidi Kaldır)", value="ac")
+])
+async def kilitle(interaction: discord.Interaction, durum: str):
+    if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ Bu komutu sadece yetkililer kullanabilir!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    channel = interaction.channel
+    default_role = interaction.guild.default_role
+
+    try:
+        if durum == "kapat":
+            # Üyelerin (everyone rolünün) mesaj göndermesini kapatır, yetkililer kendi rollerinden yazmaya devam eder
+            await channel.set_permissions(default_role, send_messages=False)
+            await channel.send("🔒 **Bu kanal yetkililer tarafından kilitlendi!** Üyeler mesaj gönderemez.")
+            await interaction.followup.send("✅ Kanal üyeler için kilitlendi (Yetkililer yazabilir).", ephemeral=True)
+        elif durum == "ac":
+            # Üyelerin mesaj gönderme iznini normale döndürür
+            await channel.set_permissions(default_role, send_messages=None)
+            await channel.send("🔓 **Kanalın kilidi açıldı!** Tekrar mesaj yazabilirsiniz.")
+            await interaction.followup.send("✅ Kanalın kilidi açıldı.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ İşlem sırasında bir hata oluştu: {e}", ephemeral=True)
 
 @bot.tree.command(name="ticket_kur", description="Ticket menüsü kurar.")
 async def ticket_kur(interaction: discord.Interaction):

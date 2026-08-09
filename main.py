@@ -345,7 +345,7 @@ async def ticket_kur(ctx):
 
 @bot.command()
 async def çekiliş(ctx):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල් Yönetim"]
     kullanici_rolleri = [role.name for role in ctx.author.roles]
     yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
@@ -387,7 +387,6 @@ async def ai(ctx, *, soru: str):
     
     async with ctx.typing():
         try:
-            # Standart senkron isteği güvenli şekilde çalıştırıyoruz
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None, 
@@ -424,7 +423,6 @@ async def on_message(message):
                 try:
                     prompt = f"Sen WinterFall adlı Minecraft ve topluluk sunucusunun destek yapay zeka asistanısın. Kullanıcının yazdığı mesaja yardımcı, kibar ve Türkçe olarak kısa/öz bir yanıt ver:\n\nKullanıcı Mesajı: {message.content}"
                     
-                    # Bloklanmayı önlemek için thread havuzunda çalıştırıyoruz
                     loop = asyncio.get_running_loop()
                     response = await loop.run_in_executor(
                         None, 
@@ -442,6 +440,8 @@ async def on_message(message):
                     await message.reply(yanit_metni)
                 except Exception as e:
                     print(f"AI Ticket Hatası: {e}")
+                    # Hatanın ne olduğunu doğrudan kanala yazdıralım ki sebebi görebilelim
+                    await message.channel.send(f"⚠️ AI Ticket Hatası Oluştu: `{e}`")
 
 # --- BAŞLATMA ---
 if __name__ == '__main__':

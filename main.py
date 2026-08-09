@@ -519,9 +519,10 @@ async def sil(interaction: discord.Interaction, miktar: int):
     deleted = await interaction.channel.purge(limit=miktar)
     await interaction.followup.send(f"🧹 **{len(deleted)}** mesaj silindi.", ephemeral=True)
 
-# --- DAVET OLAYLARI ---
+# --- GİRİŞ - ÇIKIŞ OLAYLARI ---
 @bot.event
 async def on_member_join(member):
+    # Davet sayımı işlemleri
     try:
         for invite in await member.guild.invites():
             if member.id in invite_cache and invite_cache[member.id] < invite.uses:
@@ -539,8 +540,26 @@ async def on_member_join(member):
                 break
     except: pass
 
+    # Giriş Mesajı Gönderme
+    try:
+        kanallar = member.guild.text_channels
+        giris_kanali = discord.utils.get(kanallar, name="[🎈]-giriş-çıkış") or discord.utils.get(kanallar, name="[🎈] giriş-çıkış")
+        if not giris_kanali:
+            for c in kanallar:
+                if "giriş" in c.name and "çıkış" in c.name:
+                    giris_kanali = c
+                    break
+        
+        if giris_kanali:
+            uye_sayisi = member.guild.member_count
+            mesaj = f"Sunucuya **hoş geldin** Savaşçı! Seninle beraber {uye_sayisi} kişi olduk! {member.mention}"
+            await giris_kanali.send(mesaj)
+    except Exception as e:
+        print(f"Giriş mesajı hatası: {e}")
+
 @bot.event
 async def on_member_remove(member):
+    # Çıkış Veritabanı Güncelleme
     try:
         conn = sqlite3.connect('davetler.db')
         cursor = conn.cursor()
@@ -548,6 +567,23 @@ async def on_member_remove(member):
         conn.commit()
         conn.close()
     except: pass
+
+    # Çıkış Mesajı Gönderme
+    try:
+        kanallar = member.guild.text_channels
+        cikis_kanali = discord.utils.get(kanallar, name="[🎈]-giriş-çıkış") or discord.utils.get(kanallar, name="[🎈] giriş-çıkış")
+        if not cikis_kanali:
+            for c in kanallar:
+                if "giriş" in c.name and "çıkış" in c.name:
+                    cikis_kanali = c
+                    break
+        
+        if cikis_kanali:
+            uye_sayisi = member.guild.member_count
+            mesaj = f"Sunucudan **Ayrıldı!** Sensiz {uye_sayisi} kişi kaldık. Güle güle! @{member.name}"
+            await cikis_kanali.send(mesaj)
+    except Exception as e:
+        print(f"Çıkış mesajı hatası: {e}")
 
 # --- MESAJ YÖNETİMİ (AI SADECE TICKET'TA) ---
 @bot.event

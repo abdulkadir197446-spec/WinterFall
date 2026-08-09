@@ -390,7 +390,7 @@ async def ai(ctx, *, soru: str):
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None, 
-                lambda: ai_client.models.generate_content(model='gemini-1.5-flash', contents=soru)
+                lambda: ai_client.models.generate_content(model='gemini-2.0-flash', contents=soru)
             )
             cevap = response.text
             if len(cevap) > 2000:
@@ -426,7 +426,7 @@ async def on_message(message):
                     loop = asyncio.get_running_loop()
                     response = await loop.run_in_executor(
                         None, 
-                        lambda: ai_client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+                        lambda: ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
                     )
                     
                     cevap = response.text

@@ -127,28 +127,35 @@ async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_katego
     else:
         etiket_metni = f"{member.mention} @Ticket Yetkili"
 
-    # --- PARTNERLİK İÇİN ÖZEL MESAJ VE AKIŞ (AYRI MESAJ HALİ) ---
+    # --- PARTNERLİK İÇİN DÜZELTİLMİŞ SIRALAMA VE METİN YERLEŞİMİ ---
     if secilen_kategori == "Partnerlik":
         embed = discord.Embed(
             title="💖 Partnerlik Başvuru Talebi",
             description=(
                 "📢 **Winterfall 𝐓𝐎𝐏𝐋𝐔𝐋𝐔𝐆̆𝐔 𝐍𝐄𝐃𝐈𝐑?**\n\n"
-                "⚔️ 𝐀𝐤𝐭𝐢𝐟 & 𝐒𝐚𝐦𝐢𝐦𝐢 𝐄𝐤𝐢𝐩\n"
-                "🛡️ 𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞𝐬𝐭𝐞𝐤\n"
-                "🔗 𝐌𝐞𝐫𝐠𝐞 𝐓𝐞𝐤𝐥𝐢𝐟𝐥𝐞𝐫𝐢𝐧𝐞 𝐀𝐜̧𝐢𝐠̆𝐢𝐳\n"
-                "📥 𝐄𝐤𝐢𝐩 𝐀𝐥𝐢𝐦𝐥𝐚𝐫𝐢 𝐀𝐤𝐭𝐢𝐟\n"
-                "🎮 𝐅𝐚𝐫𝐤𝐥𝐢 𝐎𝐲𝐮𝐧𝐥𝐚𝐫 – 𝐎𝐲𝐮𝐧 𝐀𝐫𝐤𝐚𝐝𝐚𝐬̧𝐢 𝐁𝐮𝐥𝐚𝐛𝐢𝐥𝐢𝐫𝐬𝐢𝐧𝐢𝐳\n"
-                "🤝 𝐒𝐚𝐦𝐢𝐦𝐢 & 𝐃𝐨𝐬𝐭𝐚𝐧𝐞 𝐎𝐫𝐭𝐚𝐦\n\n"
-                "🔥 Winterfall – 𝐁𝐢𝐫𝐥𝐢𝐤𝐭𝐞 𝐆𝐮̈𝐜̧𝐥𝐮̈𝐲𝐮̈𝐳!\n\n"
                 "Aramıza katılmak için sunucuya gelip ticket açmanız yeterli"
             ),
             color=discord.Color.from_rgb(255, 105, 180)
         )
         await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-        # 1. Mesaj: Embed ve buton
-        await ticket_channel.send(content=etiket_metni, embed=embed, view=TicketKapatView())
-        # 2. Mesaj: Link (Ayrı bir mesaj olarak alt alta düşer)
-        await ticket_channel.send("https://discord.gg/NgfQafxkDV")
+        
+        # 1. Mesaj: Sadece Embed ve Buton (İçinde etiket yok)
+        await ticket_channel.send(embed=embed, view=TicketKapatView())
+        
+        # 2. Mesaj: Etiket, istenen açıklama metni ve davet linki alt alta
+        partner_metni = (
+            f"{etiket_metni}\n\n"
+            "Winterfall 𝐓𝐎𝐏𝐋𝐔𝐋𝐔𝐆̆𝐔 𝐍𝐄𝐃𝐈𝐑?\n"
+            "𝐀𝐤𝐭𝐢𝐟 & 𝐒𝐚𝐦𝐢𝐦𝐢 𝐄𝐤𝐢𝐩\n"
+            "𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞𝐬𝐭𝐞𝐤\n"
+            "𝐌𝐞𝐫𝐠𝐞 𝐓𝐞𝐤𝐥𝐢𝐟𝐥𝐞𝐫𝐢𝐧𝐞 𝐀𝐜̧𝐢𝐠̆𝐢𝐳\n"
+            "𝐄𝐤𝐢𝐩 𝐀𝐥𝐢𝐦𝐥𝐚𝐫𝐢 𝐀𝐤𝐭𝐢𝐟\n"
+            "𝐅𝐚𝐫𝐤𝐥𝐢 𝐎𝐲𝐮𝐧𝐥𝐚𝐫 – 𝐎𝐲𝐮𝐧 𝐀𝐫𝐤𝐚𝐝𝐚𝐬̧𝐢 𝐁𝐮𝐥𝐚𝐛𝐢𝐥𝐢𝐫𝐬𝐢𝐧𝐢𝐳\n"
+            "𝐒𝐚𝐦𝐢𝐦𝐢 & 𝐃𝐨𝐬𝐭𝐚𝐧𝐞 𝐎𝐫𝐭𝐚𝐦\n"
+            "Winterfall – 𝐁𝐢𝐫𝐥𝐢𝐤𝐭𝐞 𝐆𝐮̈𝐜̧𝐥𝐮̈𝐲𝐮̈𝐳!\n\n"
+            "https://discord.gg/NgfQafxkDV"
+        )
+        await ticket_channel.send(partner_metni)
     else:
         embed = discord.Embed(
             title=f"🎫 {secilen_kategori} Talebi Açıldı",

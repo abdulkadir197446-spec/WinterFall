@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 from flask import Flask
 import discord
 from discord.ext import commands
-from google import genai
+from groq import Groq  # Groq AI kütüphanesi
 
-# --- Gemini AI Kurulumu ---
-ai_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+# --- Groq AI Kurulumu ---
+ai_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 # --- Veritabanı (SQLite) Kurulumu (Davetler İçin) ---
 def veritabani_kur():
@@ -56,7 +56,7 @@ invite_cache = {}
 
 # Yetkili Kontrol Fonksiyonu
 def yetkili_mi_kontrol_etmek(author, guild):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡 Yönetim"]
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝙡𝙡 Yönetim"]
     kullanici_rolleri = [role.name for role in author.roles]
     return author.id == guild.owner_id or any(r in kullanici_rolleri for r in kullanici_rolleri)
 
@@ -497,6 +497,17 @@ async def sil(ctx, miktar: int = None):
     embed = discord.Embed(description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.", color=discord.Color.green())
     await ctx.send(embed=embed, delete_after=4)
 
+# --- GROQ AI YANIT ÜRETME FONKSİYONU ---
+async def ai_yanit_uret(metin):
+    try:
+        chat_completion = ai_client.chat.completions.create(
+            messages=[{"role": "user", "content": metin}],
+            model="llama3-8b-8192",
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        return f"❌ Yapay zeka yanıt verirken bir hata oluştu: {e}"
+
 # --- BOT OLAYLARI & YAPAY ZEKA / KANAL SİSTEMİ ---
 @bot.event
 async def on_ready():
@@ -519,19 +530,13 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. YAPAY ZEKA SİSTEMİ: Etiketlenirse veya AÇIK TICKETLAR kategorisindeyse otomatik cevap ver
+    # 1. YAPAY ZEKA SİSTEMİ (Groq - Llama 3): Etiketlenirse veya AÇIK TICKETLAR kategorisindeyse
     if bot.user.mentioned_in(message) or is_ticket_channel(message.channel):
         temiz_mesaj = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if temiz_mesaj:
             async with message.channel.typing():
-                try:
-                    response = ai_client.models.generate_content(
-                        model='gemini-2.0-flash',
-                        contents=temiz_mesaj
-                    )
-                    await message.reply(response.text)
-                except Exception as e:
-                    await message.reply(f"❌ Yapay zeka yanıt üretirken bir hata oluştu: {e}")
+                cevap = await ai_yanit_uret(temiz_mesaj)
+                await message.reply(cevap)
         return
 
     # 2. DOĞAL DİLLE KANAL OLUŞTURMA MANTIĞI

@@ -58,7 +58,7 @@ invite_cache = {}
 def yetkili_mi_kontrol_etmek(author, guild):
     izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝙖𝙡𝙡 Yönetim"]
     kullanici_rolleri = [role.name for role in author.roles]
-    return author.id == guild.owner_id or any(r in kullanici_rolleri for r in kullanici_rolleri)
+    return author.id == guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
 def yetkili_mi_kontrol(ctx):
     return yetkili_mi_kontrol_etmek(ctx.author, ctx.guild)
@@ -127,7 +127,7 @@ async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_katego
     else:
         etiket_metni = f"{member.mention} @Ticket Yetkili"
 
-    # --- PARTNERLİK İÇİN ÖZEL MESAJ VE AKIŞ ---
+    # --- PARTNERLİK İÇİN ÖZEL MESAJ VE AKIŞ (AYRI MESAJ HALİ) ---
     if secilen_kategori == "Partnerlik":
         embed = discord.Embed(
             title="💖 Partnerlik Başvuru Talebi",
@@ -145,7 +145,9 @@ async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_katego
             color=discord.Color.from_rgb(255, 105, 180)
         )
         await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+        # 1. Mesaj: Embed ve buton
         await ticket_channel.send(content=etiket_metni, embed=embed, view=TicketKapatView())
+        # 2. Mesaj: Link (Ayrı bir mesaj olarak alt alta düşer)
         await ticket_channel.send("https://discord.gg/NgfQafxkDV")
     else:
         embed = discord.Embed(
@@ -518,12 +520,12 @@ async def sil(ctx, miktar: int = None):
     embed = discord.Embed(description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.", color=discord.Color.green())
     await ctx.send(embed=embed, delete_after=4)
 
-# --- GROQ AI YANIT ÜRETME FONKSİYONU (GÜNCEL MODEL) ---
+# --- GROQ AI YANIT ÜRETME FONKSİYONU ---
 async def ai_yanit_uret(metin):
     try:
         chat_completion = ai_client.chat.completions.create(
             messages=[{"role": "user", "content": metin}],
-            model="llama-3.1-8b-instant",  # Güncel ve aktif model
+            model="llama-3.1-8b-instant",
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
@@ -551,7 +553,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 1. YAPAY ZEKA SİSTEMİ (Groq - Llama 3.1): Etiketlenirse veya AÇIK TICKETLAR kategorisindeyse
+    # 1. YAPAY ZEKA SİSTEMİ
     if bot.user.mentioned_in(message) or is_ticket_channel(message.channel):
         temiz_mesaj = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if temiz_mesaj:

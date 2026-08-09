@@ -387,9 +387,11 @@ async def ai(ctx, *, soru: str):
     
     async with ctx.typing():
         try:
-            response = await ai_client.aio.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=soru,
+            # Standart senkron isteği güvenli şekilde çalıştırıyoruz
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: ai_client.models.generate_content(model='gemini-2.5-flash', contents=soru)
             )
             cevap = response.text
             if len(cevap) > 2000:
@@ -422,10 +424,13 @@ async def on_message(message):
                 try:
                     prompt = f"Sen WinterFall adlı Minecraft ve topluluk sunucusunun destek yapay zeka asistanısın. Kullanıcının yazdığı mesaja yardımcı, kibar ve Türkçe olarak kısa/öz bir yanıt ver:\n\nKullanıcı Mesajı: {message.content}"
                     
-                    response = await ai_client.aio.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt,
+                    # Bloklanmayı önlemek için thread havuzunda çalıştırıyoruz
+                    loop = asyncio.get_running_loop()
+                    response = await loop.run_in_executor(
+                        None, 
+                        lambda: ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                     )
+                    
                     cevap = response.text
                     if len(cevap) > 1900:
                         cevap = cevap[:1897] + "..."

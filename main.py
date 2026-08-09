@@ -7,6 +7,13 @@ from datetime import datetime, timedelta
 from flask import Flask
 import discord
 from discord.ext import commands
+from google import genai
+
+# --- Google Gemini AI Kurulumu ---
+ai_client = None
+gemini_token = os.environ.get('GEMINI_API_KEY')
+if gemini_token:
+    ai_client = genai.Client(api_key=gemini_token)
 
 # --- Render İçin Web Sunucusu ---
 app = Flask('')
@@ -80,7 +87,7 @@ async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_katego
 
     embed = discord.Embed(
         title=f"🎫 {secilen_kategori} Talebi Açıldı",
-        description=f"Merhaba {member.mention}, yetkililer en kısa sürede sizinle ilgilenecektir.\n\nDesteği kapatmak için aşağıdaki **Desteği Kapat** butonuna basabilirsiniz.",
+        description=f"Merhaba {member.mention}, yetkililer ve yapay zeka asistanımız en kısa sürede sizinle ilgilenecektir.\n\nDesteği kapatmak için aşağıdaki **Desteği Kapat** butonuna basabilirsiniz.",
         color=discord.Color.blue()
     )
 
@@ -96,7 +103,7 @@ async def olustur_ticket_kanali(interaction: discord.Interaction, secilen_katego
     await ticket_channel.send(content=etiket_metni, embed=embed, view=TicketKapatView())
     await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
 
-# --- TICKET MODALLARI (FORMALARI) ---
+# --- TICKET MODALLARI ---
 class EkipAlimFormu(discord.ui.Modal, title="Ekip Alım Başvuru Formu"):
     eski_ekip = discord.ui.TextInput(label="Eski ekibin?", placeholder="Örn: Vanguard", style=discord.TextStyle.short, required=True)
     sunucu = discord.ui.TextInput(label="Hangi sunucuda oynuyorsun?", placeholder="Örn: CraftRise", style=discord.TextStyle.short, required=True)
@@ -139,7 +146,7 @@ class GenelDestekFormu(discord.ui.Modal, title="Genel Destek Formu"):
             "Sorun": self.sorun.value
         })
 
-# --- AÇILIR MENÜ (SELECT MENU) ---
+# --- AÇILIR MENÜ ---
 class TicketSelect(discord.ui.Select):
     def __init__(self):
         options = [
@@ -296,7 +303,7 @@ async def bağlan(ctx):
 
 @bot.command()
 async def ayrıl(ctx):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
+    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝐚𝐥𝐥", "𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥 Yönetim"]
     kullanici_rolleri = [role.name for role in ctx.author.roles]
     yetkili_mi = ctx.author.id == ctx.guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
@@ -368,13 +375,64 @@ async def sil(ctx, miktar: int = None):
     embed = discord.Embed(description=f"🧹 **{len(deleted)-1}** adet mesaj başarıyla silindi.", color=discord.Color.green())
     await ctx.send(embed=embed, delete_after=4)
 
-# --- ETKİNLİKLER ---
+@bot.command()
+async def ai(ctx, *, soru: str):
+    """Doğrudan Gemini AI'a soru sorulmasını sağlar."""
+    if not ai_client:
+        await ctx.send("❌ Yapay zeka aktif değil (API Anahtarı eksik).")
+        return
+    
+    async with ctx.typing():
+        try:
+            response = ai_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=soru,
+            )
+            cevap = response.text
+            if len(cevap) > 2000:
+                cevap = cevap[:1997] + "..."
+            await ctx.send(cevap)
+        except Exception as e:
+            await ctx.send(f"❌ Yapay zeka yanıt üretirken hata oluştu: {e}")
+
+# --- ETKİNLİKLER VE YAPAY ZEKA TICKET DESTEĞİ ---
 @bot.event
 async def on_ready():
     bot.add_view(TicketSelectView())
     bot.add_view(CekilisKatilView())
     print(f'Bot başarıyla giriş yaptı: {bot.user.name}')
     await bot.change_presence(activity=discord.Game(name="!yardım | WinterFall"))
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    await bot.process_commands(message)
+
+    # KANAL İSMİ KONTROLÜ (İçinde partnerlik, ticket veya alım geçen kanallarda direkt çalışır)
+    kanal_adi = message.channel.name.lower()
+    if any(kelime in kanal_adi for kelime in ["partnerlik", "ticket", "ekip", "merge", "ally", "destek"]):
+        if ai_client and not message.content.startswith('!'):
+            async with message.channel.typing():
+                try:
+                    prompt = f"Sen WinterFall adlı Minecraft ve topluluk sunucusunun destek yapay zeka asistanısın. Kullanıcının yazdığı mesaja yardımcı, kibar ve Türkçe olarak kısa/öz bir yanıt ver:\n\nKullanıcı Mesajı: {message.content}"
+                    
+                    response = ai_client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt,
+                    )
+                    cevap = response.text
+                    if len(cevap) > 1900:
+                        cevap = cevap[:1897] + "..."
+                    
+                    ticket_yetkili_rol = discord.utils.get(message.guild.roles, name="Ticket Yetkili")
+                    rol_etiket = ticket_yetkili_rol.mention if ticket_yetkili_rol else "@Ticket Yetkili"
+
+                    yanit_metni = f"🤖 **Yapay Zeka Asistanı Yanıtı:**\n{cevap}\n\n*(Ekip yetkilisi yardımı gerekirse: {rol_etiket})*"
+                    await message.reply(yanit_metni)
+                except Exception as e:
+                    print(f"AI Ticket Hatası: {e}")
 
 # --- BAŞLATMA ---
 if __name__ == '__main__':

@@ -382,7 +382,7 @@ async def konus(interaction: discord.Interaction, mesaj: str):
         if voice_client.is_playing(): voice_client.stop()
 
         voice_client.play(discord.FFmpegPCMAudio(dosya_adi))
-        await interaction.followup.send(f"🗣️ Okunuyor: *\"{mesaj}\*\"", ephemeral=True)
+        await interaction.followup.send(r'🗣️ Okunuyor: *"' + mesaj + r'"*', ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 

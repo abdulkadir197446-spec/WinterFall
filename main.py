@@ -6,7 +6,7 @@ from flask import Flask
 import threading
 import sqlite3
 import random
-from gTTS import gTTS
+from gttS import gTTS
 import os.path
 from datetime import timedelta
 import logging

@@ -553,6 +553,11 @@ async def psifirla_komutu(interaction: discord.Interaction):
 @app_commands.describe(kullanici="Seviyesi artırılacak kullanıcı", miktar="Artırılacak miktar (Varsayılan: 1)")
 @app_commands.default_permissions(administrator=True)
 async def rankup_komutu(interaction: discord.Interaction, kullanici: discord.Member, miktar: int = 1):
+    hedef_kanal_adi = "「📈」rankup-rankdown"
+    if interaction.channel.name != hedef_kanal_adi:
+        await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
+        return
+
     await interaction.response.defer(ephemeral=True)
     conn = get_database_connection()
     if not conn:
@@ -586,6 +591,11 @@ async def rankup_komutu(interaction: discord.Interaction, kullanici: discord.Mem
 @app_commands.describe(kullanici="Seviyesi düşürülecek kullanıcı", miktar="Düşürülecek miktar (Varsayılan: 1)")
 @app_commands.default_permissions(administrator=True)
 async def rankdown_komutu(interaction: discord.Interaction, kullanici: discord.Member, miktar: int = 1):
+    hedef_kanal_adi = "「📈」rankup-rankdown"
+    if interaction.channel.name != hedef_kanal_adi:
+        await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
+        return
+
     await interaction.response.defer(ephemeral=True)
     conn = get_database_connection()
     if not conn:

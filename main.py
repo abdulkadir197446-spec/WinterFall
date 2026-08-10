@@ -92,7 +92,7 @@ initialize_database_structure()
 # SABİTLER VE KANALLAR
 # ==========================================
 MANUEL_ROLLER = ["♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "Winterfall Yönetim", "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
-EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
+EKIP_ROL = "𝙒𝙞𝙣𝐭𝐞𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
 TICKET_KATEGORI_ADI = "❄️ WINTERFALL DESTEK"
 
 KANALLAR = {
@@ -413,6 +413,11 @@ async def on_message(message):
 @app_commands.describe(member="Rankup verilecek kullanıcı", rol="Verilecek yeni rol")
 @app_commands.default_permissions(manage_roles=True)
 async def rankup_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
+    # Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
+    if interaction.channel.name != KANALLAR["rankLog"]:
+        await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
+        return
+
     await interaction.response.defer(ephemeral=True)
     try:
         await member.add_roles(rol)
@@ -435,6 +440,11 @@ async def rankup_komutu(interaction: discord.Interaction, member: discord.Member
 @app_commands.describe(member="Rankdown uygulanacak kullanıcı", rol="Alınacak rol")
 @app_commands.default_permissions(manage_roles=True)
 async def rankdown_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
+    # Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
+    if interaction.channel.name != KANALLAR["rankLog"]:
+        await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
+        return
+
     await interaction.response.defer(ephemeral=True)
     try:
         await member.remove_roles(rol)

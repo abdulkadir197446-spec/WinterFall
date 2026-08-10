@@ -14,7 +14,7 @@ import asyncio
 import sys
 
 # ==========================================
-# 0. DETAYLI LOGLAMA DAN SİSTEM YAPILANDIRMASI
+# 0. DETAYLI LOGLAMA VE SİSTEM YAPILANDIRMASI
 # ==========================================
 logging.basicConfig(
     level=logging.INFO,
@@ -404,8 +404,18 @@ async def partner_komutu(interaction: discord.Interaction, text: str):
         if is_fake:
             await interaction.followup.send("⚠️ Aynı metni tekrar girdiğiniz tespit edildi! Bu partnerlik **sahte (fake)** olarak kaydedildi ve metin gönderilmedi.", ephemeral=True)
         else:
-            await interaction.channel.send(text)
-            await interaction.followup.send("✅ Partnerlik başarıyla paylaşıldı ve sayaç güncellendi!", ephemeral=True)
+            partner_kanali = discord.utils.get(interaction.guild.text_channels, name="「🤝」partner")
+            if partner_kanali:
+                overwrites = {
+                    interaction.guild.default_role: discord.PermissionOverwrite(send_messages=False),
+                    interaction.guild.me: discord.PermissionOverwrite(send_messages=True)
+                }
+                await partner_kanali.edit(overwrites=overwrites)
+                
+                await partner_kanali.send(text)
+                await interaction.followup.send("✅ Partnerlik başarıyla paylaşıldı, sayaç güncellendi ve **「🤝」partner** kanalına gönderildi!", ephemeral=True)
+            else:
+                await interaction.followup.send("⚠️ Sayaç güncellendi ancak **「🤝」partner** adlı kanal bulunamadı! Lütfen kanal ismini kontrol edin.", ephemeral=True)
     except Exception as e:
         logger.error(f"Partner komut hatası: {e}")
         await interaction.followup.send("❌ İşlem sırasında bir hata oluştu.", ephemeral=True)

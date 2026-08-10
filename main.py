@@ -30,6 +30,7 @@ intents.voice_states = True
 intents.guilds = True
 intents.emojis = True
 intents.bans = True
+intents.audit_log_entries = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -231,7 +232,7 @@ async def on_message_delete(message):
     log_kanal = discord.utils.get(message.guild.text_channels, name=KANALLAR["mesajLog"])
     if log_kanal:
         embed = discord.Embed(title="❄️🗑️ Buz Krallığı | Mesaj Silindi", color=discord.Color.red(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Yazan Savaşçı", value=f"{message.author} (`{message.author.id}`)", inline=False)
+        embed.add_field(name="Yapan / Sayan", value=f"{message.author} (`{message.author.id}`)", inline=False)
         embed.add_field(name="Kanal", value=message.channel.mention, inline=False)
         embed.add_field(name="İçerik", value=message.content or "[Medya/Dosya]", inline=False)
         embed.set_footer(text=KIS_TEMASI['footer'])
@@ -247,7 +248,7 @@ async def on_message_edit(before, after):
     log_kanal = discord.utils.get(before.guild.text_channels, name=KANALLAR["mesajLog"])
     if log_kanal:
         embed = discord.Embed(title="❄️✏️ Buz Krallığı | Mesaj Düzenlendi", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Kullanıcı", value=f"{before.author} (`{before.author.id}`)", inline=False)
+        embed.add_field(name="Yapan / Kullanıcı", value=f"{before.author} (`{before.author.id}`)", inline=False)
         embed.add_field(name="Kanal", value=before.channel.mention, inline=False)
         embed.add_field(name="Eski Hali", value=before.content or "[Boş]", inline=False)
         embed.add_field(name="Yeni Hali", value=after.content or "[Boş]", inline=False)
@@ -265,7 +266,7 @@ async def on_member_update(before, after):
             eklenen = [r.mention for r in after.roles if r not in before.roles]
             cikarilan = [r.mention for r in before.roles if r not in after.roles]
             embed = discord.Embed(title="❄️🏷️ Rol Güncellendi", color=KIS_TEMASI['renk'], timestamp=discord.utils.utcnow())
-            embed.add_field(name="Kullanıcı", value=f"{after.mention} (`{after.id}`)", inline=False)
+            embed.add_field(name="Yapılan (Kullanıcı)", value=f"{after.mention} (`{after.id}`)", inline=False)
             if eklenen:
                 embed.add_field(name="Eklenen Roller", value=", ".join(eklenen), inline=False)
             if cikarilan:
@@ -280,24 +281,67 @@ async def on_member_update(before, after):
 async def on_voice_state_update(member, before, after):
     guild = member.guild
     log_kanal = discord.utils.get(guild.text_channels, name=KANALLAR["sesLog"])
+    if not log_kanal:
+        return
 
-    if before.channel != after.channel and log_kanal:
-        embed = discord.Embed(color=KIS_TEMASI['renk'], timestamp=discord.utils.utcnow())
-        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-        if before.channel is None and after.channel is not None:
-            embed.title = "❄️🔊 Ses Kanalına Giriş Yapıldı"
-            embed.description = f"{member.mention}, **{after.channel.name}** kanalına bağlandı."
-        elif before.channel is not None and after.channel is None:
-            embed.title = "❄️🔇 Ses Kanalından Çıkıldı"
-            embed.description = f"{member.mention}, **{before.channel.name}** kanalından ayrıldı."
-        elif before.channel != after.channel:
-            embed.title = "❄️🔀 Ses Kanalı Değiştirildi"
-            embed.description = f"{member.mention} kullanıcısı **{before.channel.name}** kanalından **{after.channel.name}** kanalına geçti."
+    embed = discord.Embed(color=KIS_TEMASI['renk'], timestamp=discord.utils.utcnow())
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    
+    yapan = "Bilinmiyor / Kendi İşlemi"
+    
+    try:
+        if before.channel == after.channel:
+            # Susturma, Sağırlaştırma veya Sesten Atılma/Taşıma durumları
+            # 1. Sunucu Susturması (Server Mute) veya Sağırlaştırması (Server Deaf)
+            if before.mute != after.mute or before.deaf != after.deaf:
+                async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
+                    if entry.target.id == member.id:
+                        yapan = f"{entry.user.mention} (`{entry.user.id}`)"
+                        break
+                
+                if before.mute != after.mute:
+                    durum = "susturuldu" if after.mute else "susturması kaldırıldı"
+                    embed.title = "❄️🎙️ Sunucu Ses Durumu Değişti"
+                    embed.description = f"**Yapan:** {yapan}\n**Yapılan:** {member.mention} kullanıcısı {durum}."
+                elif before.deaf != after.deaf:
+                    durum = "sağırlaştırıldı" if after.deaf else "sağırlaştırılması kaldırıldı"
+                    embed.title = "❄️🎧 Sunucu Kulaklık Durumu Değişti"
+                    embed.description = f"**Yapan:** {yapan}\n**Yapılan:** {member.mention} kullanıcısı {durum}."
+            
+            # 2. Sesten Atılma (Kanalın None olması ama Audit Log'da move/kick olması)
+            elif before.channel is not None and after.channel is None:
+                # Normal çıkış mı yoksa sesten atılma mı kontrol et
+                async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_move):
+                    if entry.target.id == member.id:
+                        yapan = f"{entry.user.mention} (`{entry.user.id}`)"
+                        break
+                embed.title = "❄️👢 Ses Kanalından Atıldı / Ayrıldı"
+                embed.description = f"**Yapan:** {yapan}\n**Yapılan:** {member.mention} kullanıcısı **{before.channel.name}** kanalından uzaklaştırıldı/çıktı."
+            else:
+                return
+        else:
+            # Kanal Değişimi veya Giriş / Çıkış
+            if before.channel is None and after.channel is not None:
+                embed.title = "❄️🔊 Ses Kanalına Giriş Yapıldı"
+                embed.description = f"**Yapan / Yapılan:** {member.mention}\n**Kanal:** **{after.channel.name}**"
+            elif before.channel is not None and after.channel is None:
+                embed.title = "❄️🔇 Ses Kanalından Çıkıldı"
+                embed.description = f"**Yapan / Yapılan:** {member.mention}\n**Kanal:** **{before.channel.name}**"
+            elif before.channel is not None and after.channel is not None:
+                # Kanal değiştirme veya başka biri tarafından taşıma (move)
+                async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_move):
+                    if entry.target.id == member.id:
+                        yapan = f"{entry.user.mention} (`{entry.user.id}`)"
+                        break
+                embed.title = "❄️🔀 Ses Kanalı Değiştirildi / Taşındı"
+                embed.description = f"**Yapan:** {yapan}\n**Yapılan:** {member.mention} taşındı.\n**Eski Kanal:** **{before.channel.name}** ➡️ **Yeni Kanal:** **{after.channel.name}**"
+            else:
+                return
+
         embed.set_footer(text=KIS_TEMASI['footer'])
-        try:
-            await log_kanal.send(embed=embed)
-        except Exception:
-            pass
+        await log_kanal.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Ses log hatası: {e}")
 
 @bot.event
 async def on_message(message):
@@ -454,10 +498,6 @@ class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü �
 @app_commands.default_permissions(manage_guild=True)
 async def cekilis_komutu(interaction: discord.Interaction):
     await interaction.response.send_modal(CekilisOlusturModal())
-
-# ==========================================
-# YENİ EKLENEN VE DETAYLANDIRILAN KOMUTLAR
-# ==========================================
 
 @bot.tree.command(name="zamanaşımı", description="Bir kullanıcıya belirttiğiniz süre kadar zamanaşımı (timeout) atar.")
 @app_commands.describe(member="Zamanaşımı uygulanacak savaşçı", sure="Süre (Örn: 1g, 2s, 30dk)", sebep="Zamanaşımı sebebi")
@@ -632,7 +672,7 @@ async def ban_komutu(interaction: discord.Interaction, member: discord.Member, s
         await member.ban(reason=sebep)
         await interaction.followup.send(f"❄️ {member.name} krallıktan kalıcı olarak banlandı.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=TaskException := e)
 
 @bot.tree.command(name="kick", description="Kullanıcıyı atar.")
 @app_commands.default_permissions(kick_members=True)

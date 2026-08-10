@@ -104,7 +104,6 @@ KANALLAR = {
 YASAKLI_KELIMELER = ["küfür1", "küfür2"]
 spamMap = {}
 
-# Gelişmiş Çekiliş ve Sistem Temaları
 TEMALAR = {
     "kış": {
         "adi": "WinterFall Klasik Kış Frost",
@@ -213,7 +212,6 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Komut senkronizasyon hatası: {e}")
 
-# --- Giriş / Çıkış Kart Sistemi ---
 @bot.event
 async def on_member_join(member):
     try:
@@ -248,7 +246,6 @@ async def on_member_remove(member):
     except Exception as e:
         logger.error(f"Çıkış event hatası: {e}")
 
-# --- Mesaj & Güvenlik Denetimi (Küfür, Spam, Kanal Filtreleri, AI) ---
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
@@ -257,7 +254,6 @@ async def on_message(message):
 
     is_winterfall = any(r.name == WINTERFALL_ROL for r in message.author.roles)
 
-    # 1. Ekip Duyuru Sistemi
     if message.channel.name == KANALLAR["ekipDuyuru"]:
         ekip_rol_obj = discord.utils.get(message.guild.roles, name=EKIP_ROL)
         if ekip_rol_obj:
@@ -270,7 +266,6 @@ async def on_message(message):
                 )
             )
 
-    # 2. Kanal Kısıtlamaları (Galeri Chat ve Sohbet)
     if not is_winterfall:
         if message.channel.name == KANALLAR["galeriChat"] and len(message.attachments) == 0:
             await message.delete()
@@ -288,7 +283,6 @@ async def on_message(message):
                 pass
             return
 
-    # 3. Küfür Engelleme (WinterFall Rolü Hariç)
     if not is_winterfall:
         mesaj_icerigi = message.content.lower()
         if any(kufur in mesaj_icerigi for kufur in YASAKLI_KELIMELER):
@@ -307,7 +301,6 @@ async def on_message(message):
                 await log_kanal.send(embed=log_embed)
             return
 
-        # 4. Anti-Spam / Flood Koruması
         user_id = message.author.id
         currentTime = asyncio.get_event_loop().time()
         userSpamData = spamMap.get(user_id, {"lastMessage": "", "count": 0, "time": 0})
@@ -332,7 +325,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# 6. MODERASYON, GELİŞMİŞ ÇEKİLİŞ, TICKET VE AI KOMUTLARI
+# 6. MODERASYON, ÇEKİLİŞ PANELİ, TICKET VE AI KOMUTLARI
 # ==========================================
 
 @bot.tree.command(name="ticket-kur", description="Gelişmiş seçim menülü destek (ticket) panelini kurar.")
@@ -347,56 +340,102 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.response.send_message("Ticket paneli başarıyla kuruldu!", ephemeral=True)
 
 
-@bot.tree.command(name="çekiliş", description="Ödül ve tema seçenekleriyle süslenmiş profesyonel çekiliş başlatır.")
-@app_commands.describe(
-    odul="Çekilişte verilecek ödül (Örn: Discord Nitro, 100K Para vb.)",
-    sure_saat="Çekilişin süresi kaç saat olsun?",
-    tema="Çekiliş görsel temasını seçin"
-)
-@app_commands.choices(tema=[
-    app_commands.Choice(name="Kış Klasik", value="kış"),
-    app_commands.Choice(name="Nitro & Boost", value="nitro"),
-    app_commands.Choice(name="Altın / VIP", value="altın"),
-    app_commands.Choice(name="Siber Neon", value="siber")
-])
-@app_commands.default_permissions(manage_guild=True)
-async def cekilis_komutu(interaction: discord.Interaction, odul: str, sure_saat: int = 24, tema: str = "kış"):
-    await interaction.response.defer(ephemeral=True)
-    
-    secilen_tema = TEMALAR.get(tema, TEMALAR["kış"])
-    bitis_zamani = discord.utils.utcnow() + timedelta(hours=sure_saat)
-    
-    embed = discord.Embed(
-        title=f"{secilen_tema['emoji']} WinterFall Ödüllü Çekiliş Vakti!",
-        description=(
-            f"🎁 **Verilen Ödül:** `{odul}`\n"
-            f"👑 **Düzenleyen:** {interaction.user.mention}\n"
-            f"⏳ **Bitiş Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
-            f"Katılmak için aşağıdaki **🎉 Katıl** butonuna tıklaman yeterli!"
-        ),
-        color=secilen_tema['renk']
+# --- Çekiliş Modalı (Ödül ve Süre Girişi İçin) ---
+class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Oluşturucu"):
+    odul = discord.ui.TextInput(
+        label="Çekiliş Ödülü",
+        placeholder="Örn: 1x Discord Nitro / 100K Nakit",
+        required=True,
+        max_length=100
     )
-    embed.set_footer(text=f"{secilen_tema['footer']} • Şansınız bol olsun!")
+    sure = discord.ui.TextInput(
+        label="Süre (Saat cinsinden)",
+        placeholder="Örn: 24 (1 gün için)",
+        default="24",
+        required=True,
+        max_length=3
+    )
+
+    def __init__(self, tema_key: str):
+        super().__init__()
+        self.tema_key = tema_key
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            sure_saat = int(self.sure.value)
+        except ValueError:
+            await interaction.response.send_message("❌ Süre kısmına geçerli bir sayı yazmalısın!", ephemeral=True)
+            return
+
+        secilen_tema = TEMALAR.get(self.tema_key, TEMALAR["kış"])
+        bitis_zamani = discord.utils.utcnow() + timedelta(hours=sure_saat)
+
+        embed = discord.Embed(
+            title=f"{secilen_tema['emoji']} WinterFall Ödüllü Çekiliş Vakti!",
+            description=(
+                f"🎁 **Verilen Ödül:** `{self.odul.value}`\n"
+                f"👑 **Düzenleyen:** {interaction.user.mention}\n"
+                f"⏳ **Bitiş Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
+                f"Katılmak için aşağıdaki **🎉 Katıl** butonuna tıklaman yeterli!"
+            ),
+            color=secilen_tema['renk']
+        )
+        embed.set_footer(text=f"{secilen_tema['footer']} • Şansınız bol olsun!")
+
+        class CekilisKatilView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+                self.katilanlar = set()
+
+            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v3")
+            async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
+                if btn_interaction.user.id in self.katilanlar:
+                    self.katilanlar.remove(btn_interaction.user.id)
+                    button.label = f"🎉 Katıl ({len(self.katilanlar)})"
+                    await btn_interaction.response.send_message("❌ Çekilişten başarıyla ayrıldın!", ephemeral=True)
+                else:
+                    self.katilanlar.add(btn_interaction.user.id)
+                    button.label = f"🎉 Katıl ({len(self.katilanlar)})"
+                    await btn_interaction.response.send_message("✅ Çekilişe başarıyla katıldın! Şanslı isim sen olabilirsin.", ephemeral=True)
+                await btn_interaction.message.edit(view=self)
+
+        await interaction.channel.send(embed=embed, view=CekilisKatilView())
+        await interaction.response.send_message(f"✅ **{secilen_tema['adi']}** temalı çekiliş paneli başarıyla yayına alındı!", ephemeral=True)
+
+
+# --- Çekiliş Tema Seçim Paneli (View) ---
+class CekilisTemaSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    @discord.ui.select(
+        placeholder="Çekiliş temasını seçin...",
+        min_values=1,
+        max_values=1,
+        options=[
+            discord.SelectOption(label="Kış Klasik", value="kış", emoji="❄️", description="Klasik kış mavisi tasarımı."),
+            discord.SelectOption(label="Discord Nitro & Boost", value="nitro", emoji="💎", description="Nitro ve takviye temalı özel çekiliş."),
+            discord.SelectOption(label="Özel Altın / VIP", value="altın", emoji="👑", description="Altın sarısı VIP elite tasarımı."),
+            discord.SelectOption(label="Cyberpunk / Neon", value="siber", emoji="⚡", description="Neon yeşil/mavi cyber teması.")
+        ]
+    )
+    async def tema_secildi(self, interaction: discord.Interaction, select: discord.ui.Select):
+        secilen_tema_key = select.values[0]
+        # Temayı seçtikten sonra ödül ve süreyi girmek için modal ekranını açıyoruz
+        await interaction.response.send_modal(CekilisOlusturModal(tema_key=secilen_tema_key))
+
+
+@bot.tree.command(name="çekiliş", description="Görsel temalı interaktif çekiliş yönetim panelini açar.")
+@app_commands.default_permissions(manage_guild=True)
+async def cekilis_komutu(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎁 WinterFall Çekiliş Kontrol Paneli",
+        description="Aşağıdaki menüden çekiliş için bir **tema** seçerek ödül ve süreyi belirleyebileceğin panele ulaşabilirsin.",
+        color=discord.Color.from_rgb(30, 61, 89)
+    )
+    embed.set_footer(text="WinterFall Giveaway System • Panel", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     
-    class CekilisView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-            self.katilanlar = set()
-
-        @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v2")
-        async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
-            if btn_interaction.user.id in self.katilanlar:
-                self.katilanlar.remove(btn_interaction.user.id)
-                button.label = f"🎉 Katıl ({len(self.katilanlar)})"
-                await btn_interaction.response.send_message("❌ Çekilişten başarıyla ayrıldın!", ephemeral=True)
-            else:
-                self.katilanlar.add(btn_interaction.user.id)
-                button.label = f"🎉 Katıl ({len(self.katilanlar)})"
-                await btn_interaction.response.send_message("✅ Çekilişe başarıyla katıldın! Şanslı isim sen olabilirsin.", ephemeral=True)
-            await btn_interaction.message.edit(view=self)
-
-    await interaction.channel.send(embed=embed, view=CekilisView())
-    await interaction.followup.send(f"✅ **{secilen_tema['adi']}** temalı çekiliş başarıyla yayına alındı!", ephemeral=True)
+    await interaction.response.send_message(embed=embed, view=CekilisTemaSelectView(), ephemeral=True)
 
 
 @bot.tree.command(name="sunucu", description="Sunucunun tüm detaylı istatistiklerini ve bilgilerini gösteren modern kart atar.")
@@ -404,7 +443,6 @@ async def sunucu_komutu(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     guild = interaction.guild
     
-    # İstatistik hesaplamaları
     bot_sayisi = sum(1 for m in guild.members if m.bot)
     uye_sayisi = guild.member_count - bot_sayisi
     kanal_sayisi = len(guild.channels)
@@ -447,7 +485,7 @@ async def ai_komutu(interaction: discord.Interaction, soru: str):
     elif "merhaba" in soru_kucuk or "selam" in soru_kucuk:
         yanit = f"Selamlar {interaction.user.mention}! WinterFall yapay zeka asistanı hizmetinizde."
     elif "yardım" in soru_kucuk:
-        yanit = "Sunucumuzda `/ticket-kur` ile destek açabilir, `/çekiliş` ile çekiliş başlatabilir ya da `/sunucu` ile istatistikleri inceleyebilirsin."
+        yanit = "Sunucumuzda `/ticket-kur` ile destek açabilir, `/çekiliş` ile çekiliş paneli açabilir ya da `/sunucu` ile istatistikleri inceleyebilirsin."
     elif "winterfall" in soru_kucuk:
         yanit = "WinterFall; güvenlik, eğlence, yapay zeka ve gelişmiş moderasyon araçlarını barındıran üst düzey bir Discord ekosistemidir."
     else:

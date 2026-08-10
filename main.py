@@ -191,7 +191,7 @@ class TicketSelectMenu(discord.ui.Select):
                     description="Sunucu birleşim teklifiniz için teşekkürler. Lütfen aşağıdaki bilgileri sağlayın:",
                     color=discord.Color.from_rgb(150, 50, 250)
                 )
-                embed_obj.add_field(name="Sorular", value="1. Kim kime katılcak?\n2. Sunucunuzun üye sayısı ve aktifliği nedir?\n3. Hangi sunucularda oynuyorsunuz?", inline=False)
+                embed_obj.add_field(name="Sorular", value="1. Kim kime katılcak?\n2. Sunucunuzun üye sayısı ve aktifliği nedir?\n3. Hangi sunucularda oynuyorsun?", inline=False)
                 embed_obj.set_footer(text="WinterFall Merge Systems")
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
@@ -229,7 +229,7 @@ class TicketSelectMenu(discord.ui.Select):
                     description="Ally olmak için aşağıdaki bilgileri paylaşabilirsiniz:",
                     color=discord.Color.from_rgb(50, 205, 50)
                 )
-                embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Hangi sunucularda oynuyorsunuz?", inline=False)
+                embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Hangi sunucularda oynuyorsun?", inline=False)
                 embed_obj.set_footer(text="WinterFall Ally Systems")
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
@@ -375,6 +375,10 @@ async def partner_komutu(interaction: discord.Interaction, text: str):
 
     await interaction.response.defer(ephemeral=True)
     user_id = interaction.user.id
+    
+    # Komuttan gelen metindeki \\n ifadelerini gerçek satır atlamasına (\n) çevirir
+    duzenlenmis_text = text.replace("\\n", "\n")
+
     conn = get_database_connection()
     if not conn:
         await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
@@ -388,16 +392,16 @@ async def partner_komutu(interaction: discord.Interaction, text: str):
         is_fake = False
         if result:
             real_p, fake_p, last_t = result
-            if last_t == text:
+            if last_t == duzenlenmis_text:
                 is_fake = True
                 fake_p += 1
             else:
                 real_p += 1
-            cursor.execute("UPDATE partner_stats SET real_partner = ?, fake_partner = ?, last_text = ? WHERE user_id = ?", (real_p, fake_p, text, user_id))
+            cursor.execute("UPDATE partner_stats SET real_partner = ?, fake_partner = ?, last_text = ? WHERE user_id = ?", (real_p, fake_p, duzenlenmis_text, user_id))
         else:
             real_p = 1
             fake_p = 0
-            cursor.execute("INSERT INTO partner_stats (user_id, real_partner, fake_partner, last_text) VALUES (?, ?, ?, ?)", (user_id, real_p, fake_p, text))
+            cursor.execute("INSERT INTO partner_stats (user_id, real_partner, fake_partner, last_text) VALUES (?, ?, ?, ?)", (user_id, real_p, fake_p, duzenlenmis_text))
         
         conn.commit()
 
@@ -412,7 +416,8 @@ async def partner_komutu(interaction: discord.Interaction, text: str):
                 }
                 await partner_kanali.edit(overwrites=overwrites)
                 
-                await partner_kanali.send(text)
+                # Metni alt alta düzgün şekilde gönder
+                await partner_kanali.send(duzenlenmis_text)
                 await interaction.followup.send("✅ Partnerlik başarıyla paylaşıldı, sayaç güncellendi ve **「🤝」partner** kanalına gönderildi!", ephemeral=True)
             else:
                 await interaction.followup.send("⚠️ Sayaç güncellendi ancak **「🤝」partner** adlı kanal bulunamadı! Lütfen kanal ismini kontrol edin.", ephemeral=True)

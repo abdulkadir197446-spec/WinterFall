@@ -340,7 +340,7 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.response.send_message("Ticket paneli başarıyla kuruldu!", ephemeral=True)
 
 
-# --- Çekiliş Modalı (Ödül ve Süre Girişi İçin) ---
+# --- Çekiliş Modalı (Ödül, Kazanan Sayısı ve Süre Ayarlı) ---
 class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Oluşturucu"):
     odul = discord.ui.TextInput(
         label="Çekiliş Ödülü",
@@ -348,9 +348,16 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
         required=True,
         max_length=100
     )
+    kazanan_sayisi = discord.ui.TextInput(
+        label="Kazanan Kişi Sayısı",
+        placeholder="Örn: 1 (Kaç kişiye çıkacak?)",
+        default="1",
+        required=True,
+        max_length=2
+    )
     sure = discord.ui.TextInput(
         label="Süre (Saat cinsinden)",
-        placeholder="Örn: 24 (1 gün için)",
+        placeholder="Örn: 24 (Kaç saat sonra bitecek?)",
         default="24",
         required=True,
         max_length=3
@@ -362,9 +369,10 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            kazanan_adet = int(self.kazanan_sayisi.value)
             sure_saat = int(self.sure.value)
         except ValueError:
-            await interaction.response.send_message("❌ Süre kısmına geçerli bir sayı yazmalısın!", ephemeral=True)
+            await interaction.response.send_message("❌ Kazanan sayısı ve süre kısımlarına geçerli sayılar yazmalısın!", ephemeral=True)
             return
 
         secilen_tema = TEMALAR.get(self.tema_key, TEMALAR["kış"])
@@ -374,8 +382,9 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
             title=f"{secilen_tema['emoji']} WinterFall Ödüllü Çekiliş Vakti!",
             description=(
                 f"🎁 **Verilen Ödül:** `{self.odul.value}`\n"
+                f"👥 **Kazanan Kişi Sayısı:** `{kazanan_adet}` Asil\n"
                 f"👑 **Düzenleyen:** {interaction.user.mention}\n"
-                f"⏳ **Bitiş Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
+                f"⏳ **Bitiş / Açıklama Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
                 f"Katılmak için aşağıdaki **🎉 Katıl** butonuna tıklaman yeterli!"
             ),
             color=secilen_tema['renk']
@@ -387,7 +396,7 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 super().__init__(timeout=None)
                 self.katilanlar = set()
 
-            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v3")
+            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v5")
             async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
                 if btn_interaction.user.id in self.katilanlar:
                     self.katilanlar.remove(btn_interaction.user.id)
@@ -400,10 +409,9 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 await btn_interaction.message.edit(view=self)
 
         await interaction.channel.send(embed=embed, view=CekilisKatilView())
-        await interaction.response.send_message(f"✅ **{secilen_tema['adi']}** temalı çekiliş paneli başarıyla yayına alındı!", ephemeral=True)
+        await interaction.response.send_message(f"✅ **{secilen_tema['adi']}** temalı, **{kazanan_adet}** kazananlı ve **{sure_saat} saat** sonra bitecek çekiliş paneli başarıyla kuruldu!", ephemeral=True)
 
 
-# --- Çekiliş Tema Seçim Paneli (View) ---
 class CekilisTemaSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -421,7 +429,6 @@ class CekilisTemaSelectView(discord.ui.View):
     )
     async def tema_secildi(self, interaction: discord.Interaction, select: discord.ui.Select):
         secilen_tema_key = select.values[0]
-        # Temayı seçtikten sonra ödül ve süreyi girmek için modal ekranını açıyoruz
         await interaction.response.send_modal(CekilisOlusturModal(tema_key=secilen_tema_key))
 
 
@@ -430,12 +437,37 @@ class CekilisTemaSelectView(discord.ui.View):
 async def cekilis_komutu(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎁 WinterFall Çekiliş Kontrol Paneli",
-        description="Aşağıdaki menüden çekiliş için bir **tema** seçerek ödül ve süreyi belirleyebileceğin panele ulaşabilirsin.",
+        description="Aşağıdaki menüden çekiliş için bir **tema** seçerek ödül, kazanan sayısı ve süreyi belirleyebileceğin panele ulaşabilirsin.",
         color=discord.Color.from_rgb(30, 61, 89)
     )
     embed.set_footer(text="WinterFall Giveaway System • Panel", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
     
     await interaction.response.send_message(embed=embed, view=CekilisTemaSelectView(), ephemeral=True)
+
+
+@bot.tree.command(name="sil", description="Belirtilen miktarda mesajı kanaldan toplu olarak siler.")
+@app_commands.describe(miktar="Silinecek mesaj sayısı (1 - 100 arası)")
+@app_commands.default_permissions(manage_messages=True)
+async def sil_komutu(interaction: discord.Interaction, miktar: int):
+    await interaction.response.defer(ephemeral=True)
+    if miktar < 1 or miktar > 100:
+        await interaction.followup.send("❌ Lütfen **1 ile 100** arasında bir sayı belirtin.", ephemeral=True)
+        return
+
+    try:
+        silinenler = await interaction.channel.purge(limit=miktar)
+        await interaction.followup.send(f"🧹 Başarıyla **{len(silinenler)}** adet mesaj silindi.", ephemeral=True)
+        
+        log_kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["modLog"])
+        if log_kanal:
+            embed = discord.Embed(title="❄️ WinterFall | Mesajlar Temizlendi", color=discord.Color.blue())
+            embed.add_field(name="🔨 İşlemi Yapan", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
+            embed.add_field(name="📁 Kanal", value=interaction.channel.mention, inline=False)
+            embed.add_field(name="🗑️ Silinen Miktar", value=f"{len(silinenler)} mesaj", inline=False)
+            embed.timestamp = discord.utils.utcnow()
+            await log_kanal.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Mesajlar silinirken bir hata oluştu: {e}", ephemeral=True)
 
 
 @bot.tree.command(name="sunucu", description="Sunucunun tüm detaylı istatistiklerini ve bilgilerini gösteren modern kart atar.")

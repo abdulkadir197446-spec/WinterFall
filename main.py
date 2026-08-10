@@ -482,6 +482,212 @@ async def on_voice_state_update(member, before_state, after_state):
 # ==========================================
 # 7. SLASH KOMUTLARI
 # ==========================================
+
+# --- GÖRSELLERDEKİ YENİ / EKSİK KOMUTLAR ---
+@bot.tree.command(name="kilit", description="Bulunulan kanalı üyeler için kilitler veya kilidini açar.")
+@app_commands.default_permissions(manage_channels=True)
+async def kilit_komutu(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        channel = interaction.channel
+        overwrites = channel.overwrites_for(interaction.guild.default_role)
+        current_status = overwrites.send_messages
+        # Eğer None veya True ise kilitli değil demektir, kilitleyelim (False yapalım)
+        new_status = False if current_status is None or current_status is True else True
+        overwrites.send_messages = new_status
+        await channel.set_permissions(interaction.guild.default_role, overwrite=overwrites)
+        
+        if new_status is False:
+            await interaction.channel.send("🔒 Bu kanal yetkililer tarafından kilitlendi! Üyeler mesaj gönderemez.")
+            await interaction.followup.send("✅ Kanal başarıyla kilitlendi.", ephemeral=True)
+        else:
+            await interaction.channel.send("🔓 Bu kanalın kilidi açıldı! Üyeler tekrar mesaj yazabilir.")
+            await interaction.followup.send("✅ Kanalın kilidi açıldı.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Kilit komutu hatası: {e}")
+        await interaction.followup.send("❌ Kanal kilitlenirken bir hata oluştu.", ephemeral=True)
+
+@bot.tree.command(name="çekiliş", description="Sunucuda etkileşimli, katılımcı sayısını anlık güncelleyen bir çekiliş başlatır.")
+@app_commands.default_permissions(manage_guild=True)
+async def cekilis_komutu(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        embed = discord.Embed(
+            title="🎉 Çekiliş Başladı!",
+            description="Katılmak için aşağıdaki **🎉 Katıl** butonuna tıklayın!",
+            color=discord.Color.gold()
+        )
+        embed.set_footer(text=f"Düzenleyen: {interaction.user.name}")
+        
+        class CekilisView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+                self.katilanlar = set()
+
+            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="cekilis_katil_btn")
+            async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
+                if btn_interaction.user.id in self.katilanlar:
+                    self.katilanlar.remove(btn_interaction.user.id)
+                    button.label = f"🎉 Katıl ({len(self.katilanlar)})"
+                    await btn_interaction.response.send_message("❌ Çekilişten ayrıldın!", ephemeral=True)
+                else:
+                    self.katilanlar.add(btn_interaction.user.id)
+                    button.label = f"🎉 Katıl ({len(self.katilanlar)})"
+                    await btn_interaction.response.send_message("✅ Çekilişe başarıyla katıldın!", ephemeral=True)
+                await btn_interaction.message.edit(view=self)
+
+        await interaction.channel.send(embed=embed, view=CekilisView())
+        await interaction.followup.send("✅ Çekiliş paneli gönderildi!", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Çekiliş komutu hatası: {e}")
+        await interaction.followup.send("❌ Çekiliş başlatılırken hata oluştu.", ephemeral=True)
+
+@bot.tree.command(name="ireset", description="Sunucudaki tüm davet istatistiklerini sıfırlar.")
+@app_commands.default_permissions(administrator=True)
+async def ireset_komutu(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    conn = get_database_connection()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM invites")
+            conn.commit()
+            await interaction.followup.send("✅ Sunucudaki tüm davet istatistikleri başarıyla sıfırlandı.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"İreset komutu hatası: {e}")
+            await interaction.followup.send("❌ Davetler sıfırlanırken bir hata oluştu.", ephemeral=True)
+        finally:
+            conn.close()
+
+@bot.tree.command(name="bağlan", description="Botu bulunduğun ses kanalına sokar.")
+async def baglan_komutu(interaction: discord.Interaction):
+    if not interaction.user.voice:
+        await interaction.response.send_message("❌ Önce bir ses kanalına bağlanmalısın!", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        voice_channel = interaction.user.voice.channel
+        if interaction.guild.voice_client:
+            await interaction.guild.voice_client.move_to(voice_channel)
+        else:
+            await voice_channel.connect()
+        await interaction.followup.send(f"✅ **{voice_channel.name}** kanalına bağlandım.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Bağlan komutu hatası: {e}")
+        await interaction.followup.send("❌ Ses kanalına bağlanırken bir hata oluştu.", ephemeral=True)
+
+@bot.tree.command(name="ayrıl", description="Botun ses kanalından çıkmasını sağlar.")
+async def ayril_komutu(interaction: discord.Interaction):
+    if not interaction.guild.voice_client:
+        await interaction.response.send_message("❌ Zaten bir ses kanalında değilim!", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        await interaction.guild.voice_client.disconnect()
+        await interaction.followup.send("✅ Ses kanalından ayrıldım.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Ayrıl komutu hatası: {e}")
+        await interaction.followup.send("❌ Ses kanalından çıkarken hata oluştu.", ephemeral=True)
+
+@bot.tree.command(name="sunucu", description="Sunucunun adını, sahibini ve toplam üye sayısını gösteren bilgi kartı atar.")
+async def sunucu_komutu(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        guild = interaction.guild
+        embed = discord.Embed(
+            title=f"🛡️ {guild.name} Sunucu Bilgileri",
+            color=discord.Color.blurple()
+        )
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        embed.add_field(name="👑 Sunucu Sahibi", value=guild.owner.mention if guild.owner else "Bilinmiyor", inline=True)
+        embed.add_field(name="👥 Toplam Üye", value=str(guild.member_count), inline=True)
+        embed.add_field(name="📅 Kuruluş Tarihi", value=f"<t:{int(guild.created_at.timestamp())}:D>", inline=False)
+        embed.set_footer(text="WinterFall Server Information")
+        
+        await interaction.channel.send(embed=embed)
+        await interaction.followup.send("✅ Sunucu bilgi kartı gönderildi.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Sunucu komutu hatası: {e}")
+        await interaction.followup.send("❌ Bilgi kartı gönderilemedi.", ephemeral=True)
+
+@bot.tree.command(name="i", description="Kendinin veya etiketlediğin bir kişinin davet istatistiklerini gösterir.")
+@app_commands.describe(kullanici="İstatistikleri incelenecek kullanıcı (İsteğe bağlı)")
+async def davet_bilgi_komutu(interaction: discord.Interaction, kullanici: discord.Member = None):
+    hedef = kullanici or interaction.user
+    await interaction.response.defer(ephemeral=True)
+    
+    conn = get_database_connection()
+    inv_count, fake_count, leave_count = 0, 0, 0
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT invites_count, fake_count, leave_count FROM invites WHERE user_id = ?", (hedef.id,))
+            res = cursor.fetchone()
+            if res:
+                inv_count, fake_count, leave_count = res
+        except Exception as e:
+            logger.error(f"Davet bilgisi çekme hatası: {e}")
+        finally:
+            conn.close()
+
+    embed = discord.Embed(
+        title=f"📊 Davet İstatistikleri - {hedef.name}",
+        color=discord.Color.from_rgb(50, 200, 255)
+    )
+    embed.set_thumbnail(url=hedef.display_avatar.url)
+    embed.add_field(name="📥 Gerçek Davet", value=str(inv_count), inline=True)
+    embed.add_field(name="⚠️ Fake Davet", value=str(fake_count), inline=True)
+    embed.add_field(name="🚪 Ayrılan", value=str(leave_count), inline=True)
+    embed.set_footer(text="WinterFall Invite Tracking System")
+    
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="mute", description="Belirtdiği üyeyi metin kanallarında 1 saatliğine susturur (Timeout atar).")
+@app_commands.describe(member="Susturulacak üye")
+@app_commands.default_permissions(moderate_members=True)
+async def mute_komutu(interaction: discord.Interaction, member: discord.Member):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        duration = timedelta(hours=1)
+        await member.timeout(duration, reason=f"Yetkili tarafından susturuldu: {interaction.user}")
+        await interaction.followup.send(f"✅ **{member.name}** adlı kullanıcı 1 saatliğine susturuldu.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Mute komutu hatası: {e}")
+        await interaction.followup.send(f"❌ Susturma işlemi başarısız: {e}", ephemeral=True)
+
+@bot.tree.command(name="sesat", description="Belirtilen üyeyi bulunduğu ses kanalından düşürür.")
+@app_commands.describe(member="Sesten atılacak üye")
+@app_commands.default_permissions(move_members=True)
+async def sesat_komutu(interaction: discord.Interaction, member: discord.Member):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        if member.voice:
+            await member.move_to(None, reason=f"Yetkili tarafından sesten atıldı: {interaction.user}")
+            await interaction.followup.send(f"✅ **{member.name}** ses kanalından düşürüldü.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"❌ **{member.name}** herhangi bir ses kanalında değil.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Sesat komutu hatası: {e}")
+        await interaction.followup.send(f"❌ İşlem gerçekleştirilemedi: {e}", ephemeral=True)
+
+@bot.tree.command(name="sil", description="Belirtilen miktarda (1-100 arası) mesajı kanaldan toplu olarak temizler.")
+@app_commands.describe(miktar="Silinecek mesaj sayısı")
+@app_commands.default_permissions(manage_messages=True)
+async def sil_komutu(interaction: discord.Interaction, miktar: int):
+    if miktar < 1 or miktar > 100:
+        await interaction.response.send_message("❌ Lütfen 1 ile 100 arasında bir miktar belirtin!", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        silinenler = await interaction.channel.purge(limit=miktar)
+        await interaction.followup.send(f"✅ Başarıyla **{len(silinenler)}** adet mesaj silindi.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Sil komutu hatası: {e}")
+        await interaction.followup.send(f"❌ Mesajlar silinirken bir hata oluştu: {e}", ephemeral=True)
+
+
+# --- ÖNCEKİ MEVCUT KOMUTLAR ---
 @bot.tree.command(name="duyuru", description="Sunucuda herkesi etiketleyerek duyuru yapar.")
 @app_commands.describe(mesaj="Yapılacak duyurunun içeriği")
 async def duyuru_komutu(interaction: discord.Interaction, mesaj: str):

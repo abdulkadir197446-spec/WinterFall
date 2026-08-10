@@ -558,7 +558,7 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 f"👥 **Kazanan Kişi Sayısı:** `{kazanan_adet}` Asil\n"
                 f"👑 **Düzenleyen:** {interaction.user.mention}\n"
                 f"⏳ **Bitiş Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
-                f"👥 **Katılanlar:** Henüz kimse katılmadı."
+                f"👥 **Katılanlar (0):**\nHenüz kimse katılmadı."
             ),
             color=KIS_TEMASI['renk']
         )
@@ -569,7 +569,7 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 super().__init__(timeout=None)
                 self.katilanlar = set()
 
-            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v8")
+            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v9")
             async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
                 if btn_interaction.user.id in self.katilanlar:
                     self.katilanlar.remove(btn_interaction.user.id)
@@ -580,7 +580,6 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                     button.label = f"🎉 Katıl ({len(self.katilanlar)})"
                     await btn_interaction.response.send_message("✅ Çekilişe başarıyla katıldın!", ephemeral=True)
 
-                # Katılanların etiketlerini listele (Çok fazla kişi varsa Discord karakter sınırına takılmamak için ilk 15 kişiyi gösterir)
                 if self.katilanlar:
                     katilanlar_listesi = ", ".join([f"<@{uid}>" for uid in list(self.katilanlar)[:15]])
                     if len(self.katilanlar) > 15:
@@ -588,7 +587,6 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 else:
                     katilanlar_listesi = "Henüz kimse katılmadı."
 
-                # Orijinal embed'i güncel katılımcı listesiyle güncelle
                 eski_embed = btn_interaction.message.embeds[0]
                 yeni_embed = discord.Embed(
                     title=eski_embed.title,

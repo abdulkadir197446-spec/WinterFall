@@ -38,11 +38,10 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "WinterFall Bot 7/24 Aktif! (Tüm Sistemler Devrede)"
+    return "WinterFall Bot 7/24 Aktif! (Tüm Sistemler Devrede)"  # <-- BURAYI DEĞİŞTİR
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
-
 # --- Discord Bot Kurulumu ---
 intents = discord.Intents.default()
 intents.message_content = True

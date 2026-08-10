@@ -45,7 +45,7 @@ app = Flask(__name__)
 @app.route('/')
 def home_route():
     logger.info("Web sunucusuna ping atıldı (7/24 aktif tutma isteği).")
-    return "WinterFall Pro Bot Aktif and Çalışır Durumda!", 200
+    return "WinterFall Pro Bot Aktif ve Çalışır Durumda!", 200
 
 @app.route('/health')
 def health_check():
@@ -129,13 +129,12 @@ class TicketView(discord.ui.View):
 
     @discord.ui.button(label="🙋‍♂️ Bileti Üstlen", style=discord.ButtonStyle.success, custom_id="persistent_ticket_ustlen_btn")
     async def ustlen_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Sadece "Ticket Yetkili" adındaki rolü ve yöneticileri kontrol eder
+        # Sadece "Ticket Yetkili" rolü kontrolü (Yönetici yetkisi dahil hiçbir istisna yoktur)
         yetkili_rol = discord.utils.get(interaction.guild.roles, name="Ticket Yetkili")
         
         if not yetkili_rol or yetkili_rol not in interaction.user.roles:
-            if not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message("❌ Bu bileti sadece **Ticket Yetkili** rolüne sahip olanlar üstlenebilir!", ephemeral=True)
-                return
+            await interaction.response.send_message("❌ Bu bileti sadece **Ticket Yetkili** rolüne sahip olanlar üstlenebilir!", ephemeral=True)
+            return
 
         await interaction.response.defer(ephemeral=False)
         try:
@@ -547,6 +546,69 @@ async def psifirla_komutu(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f"Partner sıfırlama hatası: {e}")
         await interaction.followup.send("❌ Sıfırlama işlemi sırasında bir hata oluştu.", ephemeral=True)
+    finally:
+        conn.close()
+
+@bot.tree.command(name="rankup", description="Belirtilen kullanıcının rütbe / seviyesini artırır.")
+@app_commands.describe(kullanici="Seviyesi artırılacak kullanıcı", miktar="Artırılacak miktar (Varsayılan: 1)")
+@app_commands.default_permissions(administrator=True)
+async def rankup_komutu(interaction: discord.Interaction, kullanici: discord.Member, miktar: int = 1):
+    await interaction.response.defer(ephemeral=True)
+    conn = get_database_connection()
+    if not conn:
+        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
+        return
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT rank_level, experience_points FROM user_ranks WHERE user_id = ?", (kullanici.id,))
+        result = cursor.fetchone()
+
+        if result:
+            yeni_seviye = result[0] + miktar
+            xp = result[1]
+            cursor.execute("UPDATE user_ranks SET rank_level = ? WHERE user_id = ?", (yeni_seviye, kullanici.id))
+        else:
+            yeni_seviye = 1 + miktar
+            xp = 0
+            cursor.execute("INSERT INTO user_ranks (user_id, rank_level, experience_points) VALUES (?, ?, ?)", (kullanici.id, yeni_seviye, xp))
+
+        conn.commit()
+        await interaction.followup.send(f"✅ {kullanici.mention} adlı kullanıcının seviyesi **{yeni_seviye}** olarak güncellendi (+{miktar}).", ephemeral=True)
+        logger.info(f"{interaction.user} tarafından {kullanici} kullanıcısının rankı artırıldı.")
+    except Exception as e:
+        logger.error(f"Rankup komut hatası: {e}")
+        await interaction.followup.send("❌ İşlem sırasında bir hata oluştu.", ephemeral=True)
+    finally:
+        conn.close()
+
+@bot.tree.command(name="rankdown", description="Belirtilen kullanıcının rütbe / seviyesini düşürür.")
+@app_commands.describe(kullanici="Seviyesi düşürülecek kullanıcı", miktar="Düşürülecek miktar (Varsayılan: 1)")
+@app_commands.default_permissions(administrator=True)
+async def rankdown_komutu(interaction: discord.Interaction, kullanici: discord.Member, miktar: int = 1):
+    await interaction.response.defer(ephemeral=True)
+    conn = get_database_connection()
+    if not conn:
+        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
+        return
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT rank_level, experience_points FROM user_ranks WHERE user_id = ?", (kullanici.id,))
+        result = cursor.fetchone()
+
+        if result:
+            yeni_seviye = max(1, result[0] - miktar)
+            xp = result[1]
+            cursor.execute("UPDATE user_ranks SET rank_level = ? WHERE user_id = ?", (yeni_seviye, kullanici.id))
+            conn.commit()
+            await interaction.followup.send(f"✅ {kullanici.mention} adlı kullanıcının seviyesi düşürüldü. Yeni seviyesi: **{yeni_seviye}**", ephemeral=True)
+            logger.info(f"{interaction.user} tarafından {kullanici} kullanıcısının rankı düşürüldü.")
+        else:
+            await interaction.followup.send(f"⚠️ {kullanici.mention} kullanıcısının veritabanında kayıtlı bir rütbesi bulunmuyor.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Rankdown komut hatası: {e}")
+        await interaction.followup.send("❌ İşlem sırasında bir hata oluştu.", ephemeral=True)
     finally:
         conn.close()
 

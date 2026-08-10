@@ -495,9 +495,9 @@ async def kilitle(interaction: discord.Interaction, durum: str):
 @bot.tree.command(name="rankup", description="Kullanıcının rolünü 1 üst seviye role yükseltir.")
 @app_commands.describe(member="Rolü yükseltilecek üye")
 async def rankup(interaction: discord.Interaction, member: discord.Member):
-    # Kanal Kontrolü (Özel Sembollü İsim)
-    if interaction.channel.name != "📈rankup-rankdown":
-        await interaction.response.send_message("❌ Bu komutu sadece `📈rankup-rankdown` kanalında kullanabilirsin!", ephemeral=True)
+    # Kanal Kontrolü (「📈」rankup-rankdown)
+    if interaction.channel.name != "「📈」rankup-rankdown":
+        await interaction.response.send_message("❌ Bu komutu sadece `「📈」rankup-rankdown` kanalında kullanabilirsin!", ephemeral=True)
         return
 
     if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
@@ -533,9 +533,9 @@ async def rankup(interaction: discord.Interaction, member: discord.Member):
 @bot.tree.command(name="rankdown", description="Kullanıcının rolünü 1 alt seviye role düşürür.")
 @app_commands.describe(member="Rolü düşürülecek üye")
 async def rankdown(interaction: discord.Interaction, member: discord.Member):
-    # Kanal Kontrolü (Özel Sembollü İsim)
-    if interaction.channel.name != "📈rankup-rankdown":
-        await interaction.response.send_message("❌ Bu komutu sadece `📈rankup-rankdown` kanalında kullanabilirsin!", ephemeral=True)
+    # Kanal Kontrolü (「📈」rankup-rankdown)
+    if interaction.channel.name != "「📈」rankup-rankdown":
+        await interaction.response.send_message("❌ Bu komutu sadece `「📈」rankup-rankdown` kanalında kullanabilirsin!", ephemeral=True)
         return
 
     if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
@@ -686,7 +686,7 @@ async def on_message(message):
 async def on_ready():
     bot.add_view(TicketSelectView())
     bot.add_view(CekilisKatilView())
-    bot.add_view(TicketKpayView() if 'TicketKpayView' in globals() else TicketKapatView())
+    bot.add_view(TicketKapatView())
     try: await bot.tree.sync()
     except: pass
     print(f'Botun rol verme, kanal kısıtlamalı rankup/rankdown özellikleri aktif!')

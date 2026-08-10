@@ -30,7 +30,6 @@ intents.voice_states = True
 intents.guilds = True
 intents.emojis = True
 intents.bans = True
-intents.audit_log_entries = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -42,7 +41,7 @@ app = Flask('')
 @app.route('/')
 def home():
     logger.info("Web sunucusuna ping atıldı (7/24 aktif tutma isteği).")
-    return "WinterFall Pro AI Bot Aktif ve Çalışır Durumda!", 200
+    return "WinterFall Pro AI Bot Aktif and Çalışır Durumda!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -291,7 +290,6 @@ async def on_voice_state_update(member, before, after):
     
     try:
         if before.channel == after.channel:
-            # Susturma, Sağırlaştırma işlemleri
             if before.mute != after.mute or before.deaf != after.deaf:
                 async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
                     if entry.target.id == member.id:
@@ -317,7 +315,6 @@ async def on_voice_state_update(member, before, after):
             else:
                 return
         else:
-            # Kanal Değişimi veya Giriş / Çıkış
             if before.channel is None and after.channel is not None:
                 embed.title = "❄️🔊 Ses Kanalına Giriş Yapıldı"
                 embed.description = f"**Yapan / Yapılan:** {member.mention}\n**Kanal:** **{after.channel.name}**"
@@ -390,7 +387,6 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
     await interaction.response.send_message("❄️ Destek paneli başarıyla yerleştirildi!", ephemeral=True)
 
-# Çekiliş katılımcılarını takip eden sözlük
 cekilis_katilimlari = {}
 
 class CekilisKatilView(discord.ui.View):

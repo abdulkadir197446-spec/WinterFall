@@ -172,10 +172,10 @@ class TicketSelectMenu(discord.ui.Select):
                 partnerlik_metni_icerigi = (
                     "📢 Winterfall 𝐓𝐎𝐏𝐋𝐔𝐋𝐔𝐆̆𝐔 𝐍𝐄𝐃𝐈𝐑?\n\n"
                     "⚔️ 𝐀𝐤𝐭𝐢𝐟 & 𝐒𝐚𝐦𝐢𝐦𝐢 𝐄𝐤𝐢𝐩\n"
-                    "🛡️ 𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞𝐬𝐭𝐞𝐤\n"
+                    "🛡️ 𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞\n"
                     "🔗 𝐌𝐞𝐫𝐠𝐞 𝐓𝐞𝐤𝐥𝐢𝐟𝐥𝐞𝐫𝐢𝐧𝐞 𝐀𝐜̧𝐢𝐠̆𝐢𝐳\n"
                     "📥 𝐄𝐤𝐢𝐩 𝐀𝐥𝐢𝐦𝐥𝐚𝐫𝐢 𝐀𝐤𝐭𝐢𝐟\n"
-                    "🎮 𝐅𝐚𝐫𝐤𝐥𝐢 𝐎𝐲𝐮𝐧𝐥𝐚𝐫 – 𝐎𝐲𝐮𝐧 𝐀𝐫𝐤𝐚𝐝𝐚𝐬̧𝐢 𝐁𝐮𝐥𝐚𝐛𝐢𝐥𝐢𝐫𝐬𝐢𝐧𝐢𝐳\n"
+                    "🎮 𝐅𝐚𝐫𝐤𝐥𝐢 𝐎𝐲𝐮𝐧𝐥𝐚𝐫 – 𝐎𝐲𝐮𝐧 𝐀𝐫𝐤𝐚𝐝𝐚𝐬̧𝐢 𝐁𝐮𝐥𝐚𝐛𝐢𝐥𝐢𝐫siniz\n"
                     "🤝 𝐒𝐚𝐦𝐢𝐦𝐢 & 𝐃𝐨𝐬𝐭𝐚𝐧𝐞 𝐎𝐫𝐭𝐚𝐦\n\n"
                     "🔥 Winterfall – 𝐁𝐢𝐫𝐥𝐢𝐤𝐭𝐞 𝐆𝐮̈𝐜̧𝐥𝐮̈𝐲𝐮̈𝐳!\n\n"
                     "Aramıza katılmak için sunucuya gelip ticket açmanız yeterli\n"
@@ -225,7 +225,6 @@ async def on_member_join(member):
 # 6. KAPSAMLI LOG SİSTEMLERİ
 # ==========================================
 
-# A. Mesaj Logları (mesaj-log)
 @bot.event
 async def on_message_delete(message):
     if message.author.bot:
@@ -258,7 +257,6 @@ async def on_message_edit(before_msg, after_msg):
     except Exception as e:
         logger.error(f"Mesaj düzenleme loglama hatası: {e}")
 
-# B. Ses Logları (ses-log - Susturma, Kulaklık Kapatma vb.)
 @bot.event
 async def on_voice_state_update(member, before_state, after_state):
     try:
@@ -266,13 +264,11 @@ async def on_voice_state_update(member, before_state, after_state):
         if not ses_log_kanali:
             return
 
-        # Sunucu Mutelenmesi (Server Mute)
         if not before_state.mute and after_state.mute:
             embed_ses = discord.Embed(title="🔇 Ses Kanalında Susturuldu", color=discord.Color.orange())
             embed_ses.add_field(name="Kullanıcı", value=member.mention, inline=False)
             await ses_log_kanali.send(embed=embed_ses)
 
-        # Kulaklık Kapatılması (Server Deaf)
         if not before_state.deaf and after_state.deaf:
             embed_ses = discord.Embed(title="🎧 Kulaklığı Kapatıldı", color=discord.Color.orange())
             embed_ses.add_field(name="Kullanıcı", value=member.mention, inline=False)
@@ -282,7 +278,7 @@ async def on_voice_state_update(member, before_state, after_state):
         logger.error(f"Ses loglama işleminde hata: {e}")
 
 # ==========================================
-# 7. SLASH KOMUTLARI (TICKET, MODERASYON, RANK, ÇEKİLİŞ, TTS)
+# 7. SLASH KOMUTLARI
 # ==========================================
 
 @bot.tree.command(name="ticket-kur", description="Destek (Ticket) sistem panelini kurulacak kanala gönderir.")
@@ -301,7 +297,6 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f"Ticket kurulum komutu hatası: {e}")
 
-# C. Moderasyon Log (moderasyon-log - Ban & Kick)
 @bot.tree.command(name="ban", description="Belirtilen kullanıcıyı sunucudan kalıcı olarak yasaklar.")
 @app_commands.default_permissions(ban_members=True)
 async def ban_komutu(interaction: discord.Interaction, member: discord.Member, sebep: str = "Sebep belirtilmedi"):
@@ -336,7 +331,7 @@ async def kick_komutu(interaction: discord.Interaction, member: discord.Member, 
     except Exception as e:
         await interaction.response.send_message(f"❌ Kick işlemi gerçekleştirilemedi: {e}", ephemeral=True)
 
-@bot.tree.command(name="timeout", description="Kullanıcıya süreli ses/mesaj yazma kısıtlaması (timeout) getirir.")
+@bot.tree.command(name="timeout", description="Kullanıcıya süreli ses/mesaj yazma kısıtlaması getirir.")
 @app_commands.default_permissions(moderate_members=True)
 async def timeout_komutu(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str = "Belirtilmedi"):
     try:
@@ -346,7 +341,6 @@ async def timeout_komutu(interaction: discord.Interaction, member: discord.Membe
     except Exception as e:
         await interaction.response.send_message(f"❌ Timeout işleminde hata: {e}", ephemeral=True)
 
-# Rank Komutları (Sadece 📈rankup-rankdown kanalında çalışır)
 @bot.tree.command(name="rankup", description="Bir kullanıcının derecesini yükseltir.")
 async def rankup_komutu(interaction: discord.Interaction, member: discord.Member):
     if interaction.channel.name != "📈rankup-rankdown":
@@ -361,7 +355,6 @@ async def rankdown_komutu(interaction: discord.Interaction, member: discord.Memb
         return
     await interaction.response.send_message(f"⚠️ {member.mention} adlı üye için rank düşürme işlemi uygulandı!")
 
-# Çekiliş Komutu
 @bot.tree.command(name="çekiliş", description="Sunucuda yeni bir ödüllü çekiliş başlatır.")
 @app_commands.default_permissions(administrator=True)
 async def cekilis_baslat_komutu(interaction: discord.Interaction, sure_dakika: int, odul: str):
@@ -371,7 +364,8 @@ async def cekilis_baslat_komutu(interaction: discord.Interaction, sure_dakika: i
             description=f"Kazanılacak Ödül: **{odul}**\nSüre: **{sure_dakika} dakika**\n\nKatılım sağlamak için hemen aşağıdaki 🎉 emojisine tıklayın!",
             color=discord.Color.gold()
         )
-        cekilis_embed.set_footer(text=database_or_system_info := "WinterFall Giveaways")
+        # Hata veren walrus operatörü kaldırıldı, footer düzeltildi:
+        cekilis_embed.set_footer(text="WinterFall Giveaways")
         
         await interaction.response.send_message("Çekiliş paneli başarıyla oluşturuldu!", ephemeral=True)
         mesaj_objesi = await interaction.channel.send(embed=cekilis_embed)
@@ -379,7 +373,6 @@ async def cekilis_baslat_komutu(interaction: discord.Interaction, sure_dakika: i
     except Exception as e:
         logger.error(f"Çekiliş başlatma hatası: {e}")
 
-# Sesli Okuma (TTS) Komutu
 @bot.tree.command(name="konus", description="Yazdığınız metni o an bulunduğunuz ses kanalında sesli olarak okutur.")
 async def konus_tts_komutu(interaction: discord.Interaction, metin: str):
     try:
@@ -421,12 +414,10 @@ async def konus_tts_komutu(interaction: discord.Interaction, metin: str):
 if __name__ == "__main__":
     logger.info("WinterFall Bot servisleri başlatılıyor...")
     
-    # Flask sunucusunu arka planda thread olarak çalıştır
     flask_arkaplan_thread = threading.Thread(target=start_flask_server, daemon=True)
     flask_arkaplan_thread.start()
     logger.info("Flask 7/24 web sunucusu arka planda tetiklendi.")
     
-    # Discord Bot Token Kontrolü
     DISCORD_BOT_TOKEN = os.getenv("DISCORD_TOKEN")
     
     if DISCORD_BOT_TOKEN:
@@ -437,4 +428,4 @@ if __name__ == "__main__":
         except Exception as general_bot_err:
             logger.critical(f"Bot çalışırken beklenmeyen hata oluştu: {general_bot_err}")
     else:
-        logger.critical("Kritik Hata: 'DISCORD_TOKEN' environment (ortam) değişkeni bulunamadı! Lütfen token'ınızı ekleyin.")
+        logger.critical("Kritik Hata: 'DISCORD_TOKEN' environment değişkeni bulunamadı!")

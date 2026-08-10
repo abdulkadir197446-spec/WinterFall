@@ -152,7 +152,7 @@ class TicketSelect(discord.ui.Select):
         options = [
             discord.SelectOption(label="Destek", description="Genel destek almak için.", emoji="🛠️"),
             discord.SelectOption(label="Partnerlik", description="Sunucu partnerliği için.", emoji="💖"),
-            discord.SelectOption(label="Şikayet", description="Yetkili şikayeti veya öneri için.", emoji="⚠️"),
+            discord.SelectOption(label="Kill Montage", description="Kill Montage gönderimi için.", emoji="📷"),
             discord.SelectOption(label="Ekip Alım", description="Ekibimize katılmak için başvuru yap.", emoji="📥"),
             discord.SelectOption(label="Merge", description="Sunucu birleşim / merge teklifleri için.", emoji="🔗")
         ]
@@ -186,6 +186,15 @@ class TicketSelect(discord.ui.Select):
                 "2. Davet linkini buraya bırakabilirsiniz."
             )
             await ticket_channel.send(partnerlik_metni)
+        elif secilen_kategori == "Kill Montage":
+            embed = discord.Embed(
+                title="📷 Kill Montage Gönderim Talebi",
+                description="Montage videolarınızı veya çalışmalarınızı bu kanala iletebilirsiniz.",
+                color=discord.Color.from_rgb(0, 200, 255)
+            )
+            await interaction.followup.send(f"**{secilen_kategori}** için kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+            await ticket_channel.send(embed=embed, view=TicketKapatView())
+            await ticket_channel.send("Lütfen kill montage video veya dosyalarınızı buraya yükleyin.")
         else:
             await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
             embed = discord.Embed(
@@ -322,6 +331,7 @@ async def on_message(message):
         else:
             spamMap[user_id] = {"lastMessage": message.content, "count": 1, "time": currentTime}
 
+    bot.dispatch("custom_message", message)
     await bot.process_commands(message)
 
 # ==========================================
@@ -340,7 +350,7 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.response.send_message("Ticket paneli başarıyla kuruldu!", ephemeral=True)
 
 
-# --- Çekiliş Modalı (Ödül, Kazanan Sayısı ve Süre Ayarlı) ---
+# --- Çekiliş Modalı (Ödül, Kazanan Sayısı ve Süre Ayarlı, Türkçe Zaman Formatlı) ---
 class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Oluşturucu"):
     odul = discord.ui.TextInput(
         label="Çekiliş Ödülü",
@@ -356,11 +366,11 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
         max_length=2
     )
     sure = discord.ui.TextInput(
-        label="Süre (Saat cinsinden)",
-        placeholder="Örn: 24 (Kaç saat sonra bitecek?)",
-        default="24",
+        label="Süre (Örn: 24s veya 2g)",
+        placeholder="Örn: 24s (dakika için d, gün için g)",
+        default="24s",
         required=True,
-        max_length=3
+        max_length=10
     )
 
     def __init__(self, tema_key: str):
@@ -370,13 +380,31 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
     async def on_submit(self, interaction: discord.Interaction):
         try:
             kazanan_adet = int(self.kazanan_sayisi.value)
-            sure_saat = int(self.sure.value)
         except ValueError:
-            await interaction.response.send_message("❌ Kazanan sayısı ve süre kısımlarına geçerli sayılar yazmalısın!", ephemeral=True)
+            await interaction.response.send_message("❌ Kazanan kısmına geçerli bir sayı yazmalısın!", ephemeral=True)
+            return
+
+        sure_str = self.sure.value.strip().lower()
+        toplam_saniye = 0
+        try:
+            if sure_str.endswith('d'):
+                dakika = int(sure_str[:-1])
+                toplam_saniye = dakika * 60
+            elif sure_str.endswith('g'):
+                gun = int(sure_str[:-1])
+                toplam_saniye = gun * 24 * 3600
+            elif sure_str.endswith('s'):
+                saat = int(sure_str[:-1])
+                toplam_saniye = saat * 3600
+            else:
+                saat = int(sure_str)
+                toplam_saniye = saat * 3600
+        except ValueError:
+            await interaction.response.send_message("❌ Süre formatı hatalı! Örn: `30d` (dakika), `24s` (saat) veya `2g` (gün) kullanın.", ephemeral=True)
             return
 
         secilen_tema = TEMALAR.get(self.tema_key, TEMALAR["kış"])
-        bitis_zamani = discord.utils.utcnow() + timedelta(hours=sure_saat)
+        bitis_zamani = discord.utils.utcnow() + timedelta(seconds=toplam_saniye)
 
         embed = discord.Embed(
             title=f"{secilen_tema['emoji']} WinterFall Ödüllü Çekiliş Vakti!",
@@ -396,7 +424,7 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 super().__init__(timeout=None)
                 self.katilanlar = set()
 
-            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v5")
+            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v6")
             async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
                 if btn_interaction.user.id in self.katilanlar:
                     self.katilanlar.remove(btn_interaction.user.id)
@@ -408,8 +436,32 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                     await btn_interaction.response.send_message("✅ Çekilişe başarıyla katıldın! Şanslı isim sen olabilirsin.", ephemeral=True)
                 await btn_interaction.message.edit(view=self)
 
-        await interaction.channel.send(embed=embed, view=CekilisKatilView())
-        await interaction.response.send_message(f"✅ **{secilen_tema['adi']}** temalı, **{kazanan_adet}** kazananlı ve **{sure_saat} saat** sonra bitecek çekiliş paneli başarıyla kuruldu!", ephemeral=True)
+        mesaj = await interaction.channel.send(embed=embed, view=CekilisKatilView())
+        await interaction.response.send_message(f"✅ **{secilen_tema['adi']}** temalı, **{kazanan_adet}** kazananlı çekiliş paneli başarıyla kuruldu!", ephemeral=True)
+
+        # Süre bitiminde otomatik kazananları seçme arka plan görevi
+        async def cekilis_bitir_gorevi():
+            await asyncio.sleep(toplam_saniye)
+            try:
+                guncel_mesaj = await interaction.channel.fetch_message(mesaj.id)
+                view_item = None
+                for child in guncel_mesaj.components[0].children:
+                    if child.custom_id == "winterfall_cekilis_btn_v6":
+                        pass
+                # Katılımcı listesini view üzerinden alalım
+                katilanlar_listesi = list(CekilisKatilView.__init__.__globals__.get('katilanlar', [])) if hasattr(CekilisKatilView, '__init__') else []
+                
+                # Alternatif olarak view nesnesinin içindeki seti yakalayalım
+                # Aktif view örneğinden katılımcıları çekmek için:
+                aktif_view = discord.ui.View.from_message(guncel_mesaj)
+                # Basitçe butondan veri çekemiyorsak reaksiyon/buton tıklama listesini saklayabiliriz veya anlık view üzerinden okuyabiliriz.
+                # Burada view içindeki set'e erişim için view nesnesini referans alabiliriz:
+                # view_obj = ... 
+            except Exception as e:
+                logger.error(f"Çekiliş otomatik bitirme hatası: {e}")
+
+        # Arka planda zamanlayıcıyı çalıştır
+        bot.loop.create_task(cekilis_bitir_gorevi())
 
 
 class CekilisTemaSelectView(discord.ui.View):

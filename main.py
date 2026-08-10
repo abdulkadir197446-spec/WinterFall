@@ -209,17 +209,17 @@ class TicketSelectMenu(discord.ui.Select):
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
                 
+                # Metnin birbirine girmemesi için satırlar \n\n ile düzenlenmiştir
                 partnerlik_metni_icerigi = (
-                    "📢 Winterfall 𝐓𝐎𝐏𝐋𝐔𝐋𝐔𝐆̆𝐔 𝐍𝐄𝐃𝐈𝐑?\n\n"
-                    "⚔️ 𝐀𝐤𝐭𝐢𝐟 & 𝐒𝐚𝐦𝐢𝐦𝐢 𝐄𝐤𝐢𝐩\n"
-                    "🛡️ 𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞𝐬𝐭𝐞𝐤\n"
-                    "🔗 𝐌𝐞𝐫𝐠𝐞 𝐓𝐞𝐤𝐥𝐢𝐟𝐥𝐞𝐫𝐢𝐧𝐞 𝐀𝐜̧𝐢𝐠̆𝐢𝐳\n"
-                    "📥 𝐄𝐤𝐢𝐩 𝐀𝐥𝐢𝐦𝐥𝐚𝐫𝐢 𝐀𝐤𝐭𝐢𝐟\n"
-                    "🎮 𝐅𝐚𝐫𝐤𝐥𝐢 𝐎𝐲𝐮𝐧𝐥𝐚𝐫 – 𝐎𝐲𝐮𝐧 Arkadaşı Bulabilirsiniz\n"
-                    "🤝 𝐒𝐚𝐦𝐢𝐦𝐢 & 𝐃𝐨𝐬𝐭𝐚𝐧𝐞 𝐎𝐫𝐭𝐚𝐦\n\n"
-                    "🔥 Winterfall – 𝐁𝐢𝐫𝐥𝐢𝐤𝐭𝐞 𝐆𝐮̈𝐜̧𝐥𝐮̈𝐲𝐮̈𝐳!\n\n"
-                    "Aramıza katılmak için sunucuya gelip ticket açmanız yeterli\n"
-                    "https://discord.gg/NgfQafxkDV"
+                    "👑 KingDooms\n"
+                    "\"Krallıklar yükselir imparatorluklar yıkılır.. Fakat KingDooms daima ayakta kalır\"\n\n"
+                    "⚔️ • Büyük savaşlar\n\n"
+                    "🏰 • Güçlü krallık sistemi\n\n"
+                    "🛡️ • Sadakat • Onur • Birlik\n\n"
+                    "🎁 • Çekilişler ve ödüller\n\n"
+                    "🤝 • Partner toplulukları\n\n"
+                    "Kılıcını kuşan ve KingDooms 'un saflarına katıl!\n\n"
+                    "🔗 Davet: https://discord.gg/Tcq2fcdR2c"
                 )
                 await ticket_channel.send(partnerlik_metni_icerigi)
 

@@ -357,7 +357,7 @@ class CekilisKatilView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v1")
+    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v2")
     async def katil_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         msg_id = interaction.message.id
         
@@ -393,7 +393,7 @@ class CekilisKatilView(discord.ui.View):
                 break
             yeni_aciklama_parcalari.append(satir)
             
-        yeni_aciklama = "\n".join(yeni_aciklama_parcalari) + f"\n👥 **Katılanlar ({len(katilanlar_set)}):**\n{katilanlar_listesi}"
+        yeni_aciklama = "\n".join(yeni_aciklama_parcalari) + f"\n\n### 👥 Katılanlar ({len(katilanlar_set)}):\n{katilanlar_listesi}"
 
         yeni_embed = discord.Embed(
             title=eski_embed.title,
@@ -433,11 +433,11 @@ class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü �
         embed = discord.Embed(
             title=f"❄️ WİNFTERFALL ÖDÜLLÜ ÇEKİLİŞ",
             description=(
-                f"🎁 **Ödül:** `{self.odul.value}`\n"
-                f"👥 **Kazanan:** `{kazanan_adet}` Kişi\n"
-                f"👑 **Düzenleyen:** {interaction.user.mention}\n"
-                f"⏳ **Bitiş:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
-                f"👥 **Katılanlar (0):**\nHenüz kimse katılmadı."
+                f"### 🎁 Ödül: `{self.odul.value}`\n"
+                f"### 👑 Kazanan: `{kazanan_adet}` Kişi\n"
+                f"**Düzenleyen:** {interaction.user.mention}\n"
+                f"**Bitiş:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
+                f"### 👥 Katılanlar (0):\nHenüz kimse katılmadı."
             ),
             color=KIS_TEMASI['renk']
         )

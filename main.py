@@ -75,7 +75,6 @@ def initialize_database_structure():
         try:
             cursor = conn.cursor()
             
-            # Davet sistemi tablosu
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS invites (
                     user_id INTEGER PRIMARY KEY,
@@ -85,7 +84,6 @@ def initialize_database_structure():
                 )
             ''')
             
-            # Kullanıcı seviye / rank tablosu
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS user_ranks (
                     user_id INTEGER PRIMARY KEY,
@@ -94,7 +92,6 @@ def initialize_database_structure():
                 )
             ''')
             
-            # Guild log kanal ayarları tablosu
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS guild_log_settings (
                     guild_id INTEGER PRIMARY KEY,
@@ -123,10 +120,13 @@ class TicketKapatView(discord.ui.View):
     @discord.ui.button(label="🔒 Desteği Kapat", style=discord.ButtonStyle.danger, custom_id="persistent_ticket_kapat_btn")
     async def kapat_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            await interaction.response.send_message("⚠️ Ticket kapatılıyor, kanal 5 saniye içinde silinecektir...", ephemeral=True)
-            logger.info(f"{interaction.user} tarafından {interaction.channel.name} adlı ticket kapatıldı.")
+            # Kimin kapattığını loga ve mesaja yansıtıyoruz
+            kapatan_kullanici = interaction.user
+            logger.info(f"{kapatan_kullanici} ({kapatan_kullanici.id}) tarafından {interaction.channel.name} adlı ticket kapatıldı.")
+            
+            await interaction.response.send_message(f"⚠️ Ticket **{kapatan_kullanici.name}** tarafından kapatılıyor, kanal 5 saniye içinde silinecektir...", ephemeral=False)
             await asyncio.sleep(5)
-            await interaction.channel.delete(reason=f"Ticket {interaction.user.name} tarafından kapatıldı.")
+            await interaction.channel.delete(reason=f"Ticket {kapatan_kullanici.name} tarafından kapatıldı.")
         except Exception as e:
             logger.error(f"Ticket kapatma işleminde hata: {e}")
 
@@ -156,23 +156,25 @@ class TicketSelectMenu(discord.ui.Select):
             if secilen_kategori == "Partnerlik":
                 embed_obj = discord.Embed(
                     title="💖 Partnerlik Başvuru Talebi",
-                    description="Aramıza katılmak için sunucuya gelip ticket açmanız yeterli",
+                    description="Aramıza katılmak için sunucuya gelip ticket açmanız yeterli.",
                     color=discord.Color.from_rgb(255, 105, 180)
                 )
+                embed_obj.add_field(name="Talep Eden", value=interaction.user.mention, inline=True)
+                embed_obj.add_field(name="Durum", value="İnceleniyor", inline=True)
+                embed_obj.set_footer(text="WinterFall Partner Systems")
+
                 await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız başarıyla oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 
-                # Rol etiketleme kontrolü
                 yetkili_rol_obj = discord.utils.get(guild.roles, name="Ticket Yetkili")
                 yetkili_etiket_metni = yetkili_rol_obj.mention if yetkili_rol_obj else "@Ticket Yetkili"
                 birlesik_etiket = f"{interaction.user.mention} {yetkili_etiket_metni}"
                 
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
                 
-                # İstediğin özel partnerlik metni
                 partnerlik_metni_icerigi = (
                     "📢 Winterfall 𝐓𝐎𝐏𝐋𝐔𝐋𝐔𝐆̆𝐔 𝐍𝐄𝐃𝐈𝐑?\n\n"
                     "⚔️ 𝐀𝐤𝐭𝐢𝐟 & 𝐒𝐚𝐦𝐢𝐦𝐢 𝐄𝐤𝐢𝐩\n"
-                    "🛡️ 𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞\n"
+                    "🛡️ 𝐒𝐚𝐯𝐚𝐬̧𝐥𝐚𝐫𝐝𝐚 𝐘𝐚𝐫𝐝𝐢𝐦 & 𝐃𝐞𝐬𝐭𝐞𝐤\n"
                     "🔗 𝐌𝐞𝐫𝐠𝐞 𝐓𝐞𝐤𝐥𝐢𝐟𝐥𝐞𝐫𝐢𝐧𝐞 𝐀𝐜̧𝐢𝐠̆𝐢𝐳\n"
                     "📥 𝐄𝐤𝐢𝐩 𝐀𝐥𝐢𝐦𝐥𝐚𝐫𝐢 𝐀𝐤𝐭𝐢𝐟\n"
                     "🎮 𝐅𝐚𝐫𝐤𝐥𝐢 𝐎𝐲𝐮𝐧𝐥𝐚𝐫 – 𝐎𝐲𝐮𝐧 𝐀𝐫𝐤𝐚𝐝𝐚𝐬̧𝐢 𝐁𝐮𝐥𝐚𝐛𝐢𝐥𝐢𝐫siniz\n"
@@ -185,10 +187,13 @@ class TicketSelectMenu(discord.ui.Select):
             else:
                 await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 embed_obj = discord.Embed(
-                    title=f"{secilen_kategori} Talebi",
-                    description="Yetkili ekibimiz en kısa süre içinde sizinle ilgilenecektir.",
-                    color=discord.Color.blue()
+                    title=f"🛡️ {secilen_kategori} Talep Paneli",
+                    description=f"Değerli **{interaction.user.name}**, yetkili ekibimiz en kısa süre içinde sizinle ilgilenecektir.\n\nLütfen sorununuzu veya talebinizi detaylı bir şekilde yazın.",
+                    color=discord.Color.from_rgb(100, 150, 255)
                 )
+                embed_obj.add_field(name="Oluşturan Kullanıcı", value=interaction.user.mention, inline=False)
+                embed_obj.set_footer(text="WinterFall Support & Security")
+
                 await ticket_channel.send(embed=embed_obj, view=TicketKapatView())
                 
         except Exception as err:
@@ -264,14 +269,18 @@ async def on_voice_state_update(member, before_state, after_state):
         if not ses_log_kanali:
             return
 
+        # Ses Kanalında Susturulma Logu
         if not before_state.mute and after_state.mute:
             embed_ses = discord.Embed(title="🔇 Ses Kanalında Susturuldu", color=discord.Color.orange())
-            embed_ses.add_field(name="Kullanıcı", value=member.mention, inline=False)
+            embed_ses.add_field(name="Etkilenen Kullanıcı", value=member.mention, inline=False)
+            embed_ses.set_footer(text=f"Kullanıcı ID: {member.id} | WinterFall Voice Log")
             await ses_log_kanali.send(embed=embed_ses)
 
+        # Kulaklık Kapatılma Logu
         if not before_state.deaf and after_state.deaf:
             embed_ses = discord.Embed(title="🎧 Kulaklığı Kapatıldı", color=discord.Color.orange())
-            embed_ses.add_field(name="Kullanıcı", value=member.mention, inline=False)
+            embed_ses.add_field(name="Etkilenen Kullanıcı", value=member.mention, inline=False)
+            embed_ses.set_footer(text=f"Kullanıcı ID: {member.id} | WinterFall Voice Log")
             await ses_log_kanali.send(embed=embed_ses)
             
     except Exception as e:
@@ -281,19 +290,28 @@ async def on_voice_state_update(member, before_state, after_state):
 # 7. SLASH KOMUTLARI
 # ==========================================
 
-@bot.tree.command(name="ticket-kur", description="Destek (Ticket) sistem panelini kurulacak kanala gönderir.")
+@bot.tree.command(name="ticket-kur", description="Destek (Ticket) sistem panelini geniş ve şık bir şekilde kurulacak kanala gönderir.")
 @app_commands.default_permissions(administrator=True)
 async def ticket_kurulum_komutu(interaction: discord.Interaction):
     try:
+        # İkinci fotoğraftaki küçük ticket paneli büyütüldü ve zenginleştirildi:
         panel_embed = discord.Embed(
-            title="❄️ WinterFall Destek Sistemi",
-            description="Aşağıdaki menüyü kullanarak ihtiyacınıza uygun destek kategorisini seçip talep oluşturabilirsiniz.",
-            color=discord.Color.from_rgb(100, 150, 255)
+            title="❄️ WinterFall Profesyonel Destek & Talep Merkezi",
+            description=(
+                "Sunucumuzda herhangi bir konuda yardıma mı ihtiyacınız var?\n"
+                "Aşağıdaki kategori menüsünü kullanarak hızlı bir şekilde destek talebi (ticket) oluşturabilirsiniz.\n\n"
+                "🛠️ **Destek:** Genel teknik ve sunucu içi yardımlar.\n"
+                "💖 **Partnerlik:** Sunucu ortaklık ve iş birliği başvuruları.\n"
+                "⚠️ **Şikayet:** Yetkili şikayetleri veya öneri bildirimleri."
+            ),
+            color=discord.Color.from_rgb(88, 101, 242)
         )
-        panel_embed.set_footer(text="WinterFall Security & Support Systems")
+        panel_embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
+        panel_embed.add_field(name="Kurallar", value="Lütfen gereksiz yere ticket açmaktan kaçınınız.", inline=False)
+        panel_embed.set_footer(text="WinterFall Security & Support Systems • Tüm hakları saklıdır.", icon_url=interaction.client.user.display_avatar.url)
         
         await interaction.channel.send(embed=panel_embed, view=TicketMainView())
-        await interaction.response.send_message("✅ Ticket paneli bu kanalda başarıyla aktif edildi!", ephemeral=True)
+        await interaction.response.send_message("✅ Geliştirilmiş ve büyütülmüş ticket paneli bu kanalda başarıyla aktif edildi!", ephemeral=True)
     except Exception as e:
         logger.error(f"Ticket kurulum komutu hatası: {e}")
 
@@ -364,7 +382,6 @@ async def cekilis_baslat_komutu(interaction: discord.Interaction, sure_dakika: i
             description=f"Kazanılacak Ödül: **{odul}**\nSüre: **{sure_dakika} dakika**\n\nKatılım sağlamak için hemen aşağıdaki 🎉 emojisine tıklayın!",
             color=discord.Color.gold()
         )
-        # Hata veren walrus operatörü kaldırıldı, footer düzeltildi:
         cekilis_embed.set_footer(text="WinterFall Giveaways")
         
         await interaction.response.send_message("Çekiliş paneli başarıyla oluşturuldu!", ephemeral=True)

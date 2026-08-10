@@ -1,6 +1,5 @@
 discord.py
 Flask
-groq
+gTTS
 PyNaCl
-davey
-gtts
+requests

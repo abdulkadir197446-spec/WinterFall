@@ -30,7 +30,6 @@ intents.voice_states = True
 intents.guilds = True
 intents.emojis = True
 intents.bans = True
-# audit_log_entries kaldırıldı (Discord.py'de böyle bir intent yok, guilds yeterlidir)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -322,7 +321,7 @@ async def on_voice_state_update(member, before, after):
     if before.mute != after.mute or before.deaf != after.deaf:
         islem_yapan = "Bilinmiyor / Kendi İşlemi"
         try:
-            await asyncio.sleep(0.5) # Audit logun Discord veritabanına işlenmesi için kısa bekleme
+            await asyncio.sleep(0.5) # Audit logun yazılması için kısa bekleme
             async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
                 if entry.target.id == member.id:
                     islem_yapan = f"{entry.user.mention} (`{entry.user.id}`)"
@@ -627,7 +626,7 @@ async def sunucu_komutu(interaction: discord.Interaction):
 @app_commands.describe(soru="Sorulacak soru")
 async def ai_komutu(interaction: discord.Interaction, soru: str):
     await interaction.response.defer(thinking=True)
-    yanit = f"Analiz edildi: '{soru' konusunu inceliyorum. WinterFall yapay zeka modülü aktif."
+    yanit = f"Analiz edildi: '{soru}' konusunu inceliyorum. WinterFall yapay zeka modülü aktif."
     embed = discord.Embed(title="🤖 WinterFall AI", description=yanit, color=discord.Color.blue())
     await interaction.followup.send(embed=embed)
 

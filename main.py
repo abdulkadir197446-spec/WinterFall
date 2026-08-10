@@ -92,8 +92,19 @@ initialize_database_structure()
 # SABİTLER VE KANALLAR
 # ==========================================
 MANUEL_ROLLER = ["♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "Winterfall Yönetim", "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
-EKIP_ROL = "𝙒𝙞𝙣𝐭𝐞𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
+EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
 TICKET_KATEGORI_ADI = "❄️ WINTERFALL DESTEK"
+
+# Sadece bu roller üzerinde rankup / rankdown yapılabilir
+GECERLI_RANK_ROLLERI = [
+    "❄️Denetleyici",
+    "❄️Asistan +",
+    "❄️Asistan",
+    "❄️Moderatör +",
+    "❄️Moderatör",
+    "❄️Baş Sorumlu",
+    "❄️Sorumlu"
+]
 
 KANALLAR = {
     "girisCıkıs": "「🎈」giriş-çıkış",
@@ -411,11 +422,21 @@ async def on_message(message):
 # ==========================================
 @bot.tree.command(name="rankup", description="Bir kullanıcıya manuel rankup verir ve rank-log kanalına kaydeder.")
 @app_commands.describe(member="Rankup verilecek kullanıcı", rol="Verilecek yeni rol")
-@app_commands.default_permissions(manage_roles=True)
 async def rankup_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
-    # Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
+    # 1. Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
     if interaction.channel.name != KANALLAR["rankLog"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
+        return
+
+    # 2. Komutu kullanan kişide "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" rolü var mı kontrol et (Bot komutu tetikleyemediği için üyeler için geçerlidir)
+    has_winterfall_role = any(r.name == "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" for r in interaction.user.roles)
+    if not has_winterfall_role and not interaction.user.bot:
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        return
+
+    # 3. Seçilen rol, izin verilen rank rolleri listesinde mi kontrol et
+    if rol.name not in GECERLI_RANK_ROLLERI:
+        await interaction.response.send_message(f"❌ Yalnızca belirtilen yetki rank rolleri üzerinde işlem yapabilirsin! Seçtiğin rol geçersiz.", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -438,11 +459,21 @@ async def rankup_komutu(interaction: discord.Interaction, member: discord.Member
 
 @bot.tree.command(name="rankdown", description="Bir kullanıcının rankını düşürür ve rank-log kanalına kaydeder.")
 @app_commands.describe(member="Rankdown uygulanacak kullanıcı", rol="Alınacak rol")
-@app_commands.default_permissions(manage_roles=True)
 async def rankdown_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
-    # Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
+    # 1. Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
     if interaction.channel.name != KANALLAR["rankLog"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
+        return
+
+    # 2. Komutu kullanan kişide "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" rolü var mı kontrol et
+    has_winterfall_role = any(r.name == "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" for r in interaction.user.roles)
+    if not has_winterfall_role and not interaction.user.bot:
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        return
+
+    # 3. Seçilen rol, izin verilen rank rolleri listesinde mi kontrol et
+    if rol.name not in GECERLI_RANK_ROLLERI:
+        await interaction.response.send_message(f"❌ Yalnızca belirtilen yetki rank rolleri üzerinde işlem yapabilirsin! Seçtiğin rol geçersiz.", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -717,7 +748,7 @@ async def sil_komutu(interaction: discord.Interaction, miktar: int):
         return
     try:
         silinenler = await interaction.channel.purge(limit=miktar)
-        await interaction.followup.send(f"❄️ Başarıyla **{len(silinenler)}** adet mesaj buz edildi (silindi).", ephemeral=True)
+        await interaction.followup.send(f"❄️ Başarıyla **{len(silinenler)}** adet mesaj buz edildi (silignedi).", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 

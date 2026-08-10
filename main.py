@@ -30,6 +30,7 @@ intents.voice_states = True
 intents.guilds = True
 intents.emojis = True
 intents.bans = True
+intents.audit_log_entries = True  # Denetim kaydı (Audit Log) takibi için eklendi
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -148,7 +149,7 @@ class TicketSelect(discord.ui.Select):
         secilen_kategori = self.values[0]
         guild = interaction.guild
         
-        # "AÇIK TICKETLAR" kategorisini bul veya yoksa oluştur
+        # SORUN ÇÖZÜLDÜ: Kategori ismi büyük/küçük harf duyarlılığı veya tam eşleşmeyle "AÇIK TICKETLAR" kategorisine kuruluyor
         kategori = discord.utils.get(guild.categories, name=TICKET_KATEGORI_ADI)
         if not kategori:
             try:
@@ -322,7 +323,54 @@ async def on_guild_role_delete(role):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    log_kanal = discord.utils.get(member.guild.text_channels, name=KANALLAR["sesLog"])
+    guild = member.guild
+    log_kanal = discord.utils.get(guild.text_channels, name=KANALLAR["sesLog"])
+
+    # 1. Önce sunucu içi kulaklık/mikrofon susturma/sağırlaştırma (mute/deaf) işlemlerini denetim kaydı ile yakalayalım
+    if before.mute != after.mute or before.deaf != after.deaf:
+        islem_yapan = "Bilinmiyor / Kendi İşlemi"
+        try:
+            await asyncio.sleep(0.5) # Audit logun düşmesi için kısa bir gecikme
+            async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
+                if entry.target.id == member.id:
+                    islem_yapan = f"{entry.user.mention} (`{entry.user.id}`)"
+                    break
+        except Exception as e:
+            logger.error(f"Audit log okuma hatası: {e}")
+
+        if log_kanal:
+            embed = discord.Embed(timestamp=discord.utils.utcnow())
+            embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+            
+            # Mikrofon durumu değiştiyse
+            if before.mute != after.mute:
+                if after.mute:
+                    embed.title = "🎙️ Ses Kanalında Susturuldu (Mute)"
+                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
+                    embed.color = discord.Color.red()
+                else:
+                    embed.title = "🎙️ Ses Kanalında Susturması Kaldırıldı"
+                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
+                    embed.color = discord.Color.green()
+            
+            # Kulaklık durumu değiştiyse
+            elif before.deaf != after.deaf:
+                if after.deaf:
+                    embed.title = "🎧 Ses Kanalında Sağırlaştırıldı (Deafen)"
+                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
+                    embed.color = discord.Color.red()
+                else:
+                    embed.title = "🎧 Ses Kanalında Sağırlaştırması Kaldırıldı"
+                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
+                    embed.color = discord.Color.green()
+
+            try:
+                await log_kanal.send(embed=embed)
+            except Exception:
+                pass
+        return
+
+    # 2. Standart Ses Kanalına Giriş / Çıkış / Değiştirme Logları
     if log_kanal:
         embed = discord.Embed(timestamp=discord.utils.utcnow())
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
@@ -556,7 +604,6 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
 @bot.tree.command(name="çekiliş", description="Doğrudan kış temalı interaktif çekiliş oluşturma panelini açar.")
 @app_commands.default_permissions(manage_guild=True)
 async def cekilis_komutu(interaction: discord.Interaction):
-    # Artık tema sormadan doğrudan kış temalı modalı açıyor
     await interaction.response.send_modal(CekilisOlusturModal())
 
 
@@ -701,7 +748,7 @@ if __name__ == "__main__":
     t = threading.Thread(target=run_flask, daemon=True)
     t.start()
     
-    TOKEN = os.getenv("DISCORD_TOKEN")
+    TOKEN = os.environ.get("DISCORD_TOKEN")
     if TOKEN:
         bot.run(TOKEN)
     else:

@@ -108,7 +108,7 @@ def initialize_database_structure():
                     fake_partner INTEGER DEFAULT 0,
                     last_text TEXT DEFAULT ""
                 )
-            ''')
+            \'\'')
             
             conn.commit()
             logger.info("Veritabanı tabloları başarıyla oluşturuldu ve doğrulandı.")
@@ -122,9 +122,52 @@ initialize_database_structure()
 # ==========================================
 # 4. TİCKET SİSTEMİ (BUTONLAR, MENÜLER VE SORULAR)
 # ==========================================
-class TicketKapatView(discord.ui.View):
-    def __init__(self):
+class TicketView(discord.ui.View):
+    def __init__(self, ticket_sahibi_id: int):
         super().__init__(timeout=None)
+        self.ticket_sahibi_id = ticket_sahibi_id
+
+    @discord.ui.button(label="🙋‍♂️ Bileti Üstlen", style=discord.ButtonStyle.success, custom_id="persistent_ticket_ustlen_btn")
+    async def ustlen_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=False)
+        try:
+            guild = interaction.guild
+            kanal = interaction.channel
+            ustlenen = interaction.user
+
+            ticket_sahibi = guild.get_member(self.ticket_sahibi_id)
+            if not ticket_sahibi:
+                # Eğer cache'de yoksa fetch etmeyi dene
+                try:
+                    ticket_sahibi = await guild.fetch_member(self.ticket_sahibi_id)
+                except:
+                    ticket_sahibi = None
+
+            # İzinleri güncelle: Sadece Bot, Ticket Sahibi ve Bileti Üstlenen yazabilsin
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
+            }
+
+            if ticket_sahibi:
+                overwrites[ticket_sahibi] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+            
+            overwrites[ustlenen] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+
+            await kanal.edit(overwrites=overwrites, reason=f"Bilet {ustlenen.name} tarafından üstlenildi.")
+
+            embed = discord.Embed(
+                title="🙋‍♂️ Bilet Üstlenildi",
+                description=f"Bu bilet **{ustlenen.mention}** tarafından üstlenilmiştir!\nArtık bu kanala sadece bilet sahibi ve üstlenen yetkili mesaj yazabilir.",
+                color=discord.Color.green()
+            )
+            embed.set_footer(text="WinterFall Ticket Management")
+            
+            # Butonu devre dışı bırakmak isteğe bağlıdır, şimdilik bilgilendirme atıyoruz
+            await kanal.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Bileti üstlenme hatası: {e}")
+            await interaction.followup.send("❌ Bilet üstlenilirken bir hata oluştu.", ephemeral=True)
 
     @discord.ui.button(label="🔒 Desteği Kapat", style=discord.ButtonStyle.danger, custom_id="persistent_ticket_kapat_btn")
     async def kapat_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -174,6 +217,8 @@ class TicketSelectMenu(discord.ui.Select):
             yetkili_etiket_metni = yetkili_rol_obj.mention if yetkili_rol_obj else "@Ticket Yetkili"
             birlesik_etiket = f"{interaction.user.mention} {yetkili_etiket_metni}"
 
+            view_nesnesi = TicketView(ticket_sahibi_id=interaction.user.id)
+
             if secilen_kategori == "Ekip Alım":
                 embed_obj = discord.Embed(
                     title="📥 Ekip Alım Başvuru Talebi",
@@ -183,7 +228,7 @@ class TicketSelectMenu(discord.ui.Select):
                 embed_obj.add_field(name="Sorular", value="1. Eski ekibin neresi?\n2. Oyun içi ismin?\n3. Hangi sunucularda oynuyorsun?", inline=False)
                 embed_obj.set_footer(text="WinterFall Ekip Alım Sistemleri")
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
 
             elif secilen_kategori == "Merge":
                 embed_obj = discord.Embed(
@@ -194,7 +239,7 @@ class TicketSelectMenu(discord.ui.Select):
                 embed_obj.add_field(name="Sorular", value="1. Kim kime katılcak?\n2. Sunucunuzun üye sayısı ve aktifliği nedir?\n3. Hangi sunucularda oynuyorsun?", inline=False)
                 embed_obj.set_footer(text="WinterFall Merge Systems")
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
 
             elif secilen_kategori == "Partnerlik":
                 embed_obj = discord.Embed(
@@ -207,7 +252,7 @@ class TicketSelectMenu(discord.ui.Select):
                 embed_obj.set_footer(text="WinterFall Partner Systems")
 
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
                 
                 partnerlik_metni_icerigi = (
                     "👑 KingDooms\n"
@@ -231,7 +276,7 @@ class TicketSelectMenu(discord.ui.Select):
                 embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Hangi sunucularda oynuyorsun?", inline=False)
                 embed_obj.set_footer(text="WinterFall Ally Systems")
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
 
             else:  # Genel Destek
                 embed_obj = discord.Embed(
@@ -243,7 +288,7 @@ class TicketSelectMenu(discord.ui.Select):
                 embed_obj.set_footer(text="WinterFall Support & Security")
 
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
                 
         except Exception as err:
             logger.error(f"Ticket oluşturma callback hatası: {err}")
@@ -277,12 +322,10 @@ async def on_member_join(member):
 
 @bot.event
 async def on_message(message):
-    # Botun kendi mesajlarını yoksay
     if message.author.bot:
         await bot.process_commands(message)
         return
 
-    # Sadece 「🤝」partner kanalına atılan mesajları takip et
     if message.channel.name == "「🤝」partner":
         user_id = message.author.id
         mesaj_icerigi = message.content
@@ -311,7 +354,6 @@ async def on_message(message):
                 conn.commit()
 
                 if not is_fake:
-                    # Log / Sayaç kanalına (「⏳」partnerlik-sayaç) kaçıncı partnerlik olduğunu bildir
                     log_embed = discord.Embed(
                         title="🤝 Yeni Partnerlik Gerçekleştirildi",
                         description=f"**{message.author.mention}** adlı yetkili yeni bir partnerlik paylaştı!",
@@ -325,7 +367,6 @@ async def on_message(message):
                     if sayaç_kanali:
                         await sayaç_kanali.send(embed=log_embed)
                 else:
-                    # Sahte partnerlik atıldıysa kullanıcıyı uyar ve mesajı sil (isteğe bağlı)
                     await message.delete()
                     uyari_mesaji = await message.channel.send(f"⚠️ {message.author.mention} Aynı metni tekrar girdiğiniz tespit edildi! Bu partnerlik **sahte (fake)** olarak algılandı ve silindi.")
                     await asyncio.sleep(5)
@@ -427,6 +468,25 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f"Ticket kurulum komutu hatası: {e}")
 
+@bot.tree.command(name="kişiekle", description="Aktif ticket kanalına belirttiğiniz kullanıcıyı ekler.")
+@app_commands.describe(kullanici="Kanala eklenecek kullanıcı")
+async def kisiekle_komutu(interaction: discord.Interaction, kullanici: discord.Member):
+    if not interaction.channel.name.startswith("ticket-"):
+        await interaction.response.send_message("❌ Bu komut sadece ticket kanallarında kullanılabilir!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    try:
+        kanal = interaction.channel
+        # Mevcut kanal izinlerini al ve eklenen kullanıcıya okuma/yazma izni ver
+        await kanal.set_permissions(kullanici, view_channel=True, send_messages=True, read_message_history=True)
+        
+        await kanal.send(f"➕ {kullanici.mention} bu bilete eklendi!")
+        await interaction.followup.send(f"✅ {kullanici.name} başarıyla ticket kanalına dahil edildi.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Kişi ekleme komut hatası: {e}")
+        await interaction.followup.send("❌ Kullanıcı eklenirken bir hata oluştu.", ephemeral=True)
+
 @bot.tree.command(name="partnersayaç", description="Belirtilen veya kendi partnerlik istatistiklerinizi gösterir.")
 @app_commands.describe(kullanici="İstatistiklerine bakılacak kullanıcı (isteğe bağlı)")
 async def partnersayac_komutu(interaction: discord.Interaction, kullanici: discord.Member = None):
@@ -469,7 +529,6 @@ async def partnersayac_komutu(interaction: discord.Interaction, kullanici: disco
 
 @bot.tree.command(name="psıfırla", description="Tüm kullanıcıların partnerlik istatistiklerini sıfırlar.")
 async def psifirla_komutu(interaction: discord.Interaction):
-    # Yetki Kontrolü: Sadece '♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥' rolüne sahip olanlar kullanabilir
     gerekli_rol_adi = "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
     kullanici_rolleri = [rol.name for rol in interaction.user.roles]
     

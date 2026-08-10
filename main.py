@@ -501,6 +501,60 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
     await interaction.response.send_message("Ticket paneli başarıyla kuruldu!", ephemeral=True)
 
+# Çekiliş katılımcılarını global olarak takip eden sözlük
+cekilis_katilimlari = {}
+
+class CekilisKatilView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v12")
+    async def katil_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg_id = interaction.message.id
+        
+        if msg_id not in cekilis_katilimlari:
+            cekilis_katilimlari[msg_id] = set()
+
+        katilanlar_set = cekilis_katilimlari[msg_id]
+        user_id = interaction.user.id
+
+        if user_id in katilanlar_set:
+            katilanlar_set.remove(user_id)
+            await interaction.response.send_message("❌ Çekilişten başarıyla ayrıldın!", ephemeral=True)
+        else:
+            katilanlar_set.add(user_id)
+            await interaction.response.send_message("✅ Çekilişe başarıyla katıldın!", ephemeral=True)
+
+        button.label = f"🎉 Katıl ({len(katilanlar_set)})"
+
+        if katilanlar_set:
+            katilanlar_listesi = ", ".join([f"<@{uid}>" for uid in list(katilanlar_set)[:15]])
+            if len(katilanlar_set) > 15:
+                katilanlar_listesi += f" ve +{len(katilanlar_set) - 15} kişi daha..."
+        else:
+            katilanlar_listesi = "Henüz kimse katılmadı."
+
+        eski_embed = interaction.message.embeds[0]
+        
+        embed_satirlari = eski_embed.description.split("\n")
+        yeni_aciklama_parcalari = []
+        
+        for satir in embed_satirlari:
+            if satir.startswith("👥 **Katılanlar"):
+                break
+            yeni_aciklama_parcalari.append(satir)
+            
+        yeni_aciklama = "\n".join(yeni_aciklama_parcalari) + f"\n👥 **Katılanlar ({len(katilanlar_set)}):**\n{katilanlar_listesi}"
+
+        yeni_embed = discord.Embed(
+            title=eski_embed.title,
+            description=yeni_aciklama,
+            color=KIS_TEMASI['renk']
+        )
+        yeni_embed.set_footer(text=eski_embed.footer.text)
+        
+        await interaction.message.edit(embed=yeni_embed, view=self)
+
 class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Oluşturucu"):
     odul = discord.ui.TextInput(
         label="Çekiliş Ödülü",
@@ -534,17 +588,13 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
         toplam_saniye = 0
         try:
             if sure_str.endswith('d'):
-                dakika = int(sure_str[:-1])
-                toplam_saniye = dakika * 60
+                toplam_saniye = int(sure_str[:-1]) * 60
             elif sure_str.endswith('g'):
-                gun = int(sure_str[:-1])
-                toplam_saniye = gun * 24 * 3600
+                toplam_saniye = int(sure_str[:-1]) * 24 * 3600
             elif sure_str.endswith('s'):
-                saat = int(sure_str[:-1])
-                toplam_saniye = saat * 3600
+                toplam_saniye = int(sure_str[:-1]) * 3600
             else:
-                saat = int(sure_str)
-                toplam_saniye = saat * 3600
+                toplam_saniye = int(sure_str) * 3600
         except ValueError:
             await interaction.response.send_message("❌ Süre formatı hatalı! Örn: `30d`, `24s` veya `2g` kullanın.", ephemeral=True)
             return
@@ -563,44 +613,6 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
             color=KIS_TEMASI['renk']
         )
         embed.set_footer(text=f"{KIS_TEMASI['footer']} • Şansınız bol olsun!")
-
-        class CekilisKatilView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=None)
-                self.katilanlar = set()
-
-            @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v9")
-            async def katil_btn(self, btn_interaction: discord.Interaction, button: discord.ui.Button):
-                if btn_interaction.user.id in self.katilanlar:
-                    self.katilanlar.remove(btn_interaction.user.id)
-                    button.label = f"🎉 Katıl ({len(self.katilanlar)})"
-                    await btn_interaction.response.send_message("❌ Çekilişten başarıyla ayrıldın!", ephemeral=True)
-                else:
-                    self.katilanlar.add(btn_interaction.user.id)
-                    button.label = f"🎉 Katıl ({len(self.katilanlar)})"
-                    await btn_interaction.response.send_message("✅ Çekilişe başarıyla katıldın!", ephemeral=True)
-
-                if self.katilanlar:
-                    katilanlar_listesi = ", ".join([f"<@{uid}>" for uid in list(self.katilanlar)[:15]])
-                    if len(self.katilanlar) > 15:
-                        katilanlar_listesi += f" ve +{len(self.katilanlar) - 15} kişi daha..."
-                else:
-                    katilanlar_listesi = "Henüz kimse katılmadı."
-
-                eski_embed = btn_interaction.message.embeds[0]
-                yeni_embed = discord.Embed(
-                    title=eski_embed.title,
-                    description=(
-                        f"🎁 **Verilen Ödül:** `{self.odul.value}`\n"
-                        f"👥 **Kazanan Kişi Sayısı:** `{kazanan_adet}` Asil\n"
-                        f"👑 **Düzenleyen:** {interaction.user.mention}\n"
-                        f"⏳ **Bitiş Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
-                        f"👥 **Katılanlar ({len(self.katilanlar)}):**\n{katilanlar_listesi}"
-                    ),
-                    color=KIS_TEMASI['renk']
-                )
-                yeni_embed.set_footer(text=eski_embed.footer.text)
-                await btn_interaction.message.edit(embed=yeni_embed, view=self)
 
         await interaction.channel.send(embed=embed, view=CekilisKatilView())
         await interaction.response.send_message(f"✅ Çekiliş paneli kuruldu!", ephemeral=True)

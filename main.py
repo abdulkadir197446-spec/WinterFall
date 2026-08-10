@@ -93,7 +93,7 @@ initialize_database_structure()
 # ==========================================
 WINTERFALL_ROL = "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
 EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
-TICKET_KATEGORI_ADI = "❄️ WİNFTERFALL DESTEK"
+TICKET_KATEGORI_ADI = "❄️ WINTERFALL DESTEK"
 
 KANALLAR = {
     "girisCıkıs": "「🎈」giriş-çıkış",
@@ -311,7 +311,7 @@ async def on_message(message):
         ekip_rol_obj = discord.utils.get(message.guild.roles, name=EKIP_ROL)
         if is_winterfall and ekip_rol_obj:
             dm_embed = discord.Embed(
-                title='❄️ WİNFTERFALL EKİP BİLDİRİSİ',
+                title='❄️ WINTERFALL EKİP BİLDİRİSİ',
                 description=f"**Yayan Savaşçı:** {message.author.mention}\n\n[Mesaja Gitmek İçin Tıkla]({message.url})",
                 color=KIS_TEMASI['renk']
             )
@@ -342,7 +342,7 @@ async def on_message(message):
 @app_commands.default_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="❄️ WİNFTERFALL DESTEK MERKEZİ",
+        title="❄️ WINTERFALL DESTEK MERKEZİ",
         description="Aşağıdaki buzdan menüyü kullanarak ihtiyacına uygun destek talebini oluşturabilirsin.",
         color=KIS_TEMASI['renk']
     )
@@ -357,7 +357,7 @@ class CekilisKatilView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v2")
+    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v3")
     async def katil_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         msg_id = interaction.message.id
         
@@ -389,7 +389,7 @@ class CekilisKatilView(discord.ui.View):
         yeni_aciklama_parcalari = []
         
         for satir in embed_satirlari:
-            if satir.startswith("👥 **Katılanlar"):
+            if satir.startswith("### 👥 Katılanlar") or satir.startswith("👥 **Katılanlar"):
                 break
             yeni_aciklama_parcalari.append(satir)
             
@@ -406,6 +406,7 @@ class CekilisKatilView(discord.ui.View):
 
 class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü Çekiliş"):
     odul = discord.ui.TextInput(label="Çekiliş Ödülü", placeholder="Örn: 1x Discord Nitro", required=True, max_length=100)
+    aciklama = discord.ui.TextInput(label="Açıklama / Kurallar", placeholder="Örn: Sunucumuzda aktif kalmak zorunludur.", style=discord.TextStyle.paragraph, required=False, max_length=300)
     kazanan_sayisi = discord.ui.TextInput(label="Kazanan Sayısı", placeholder="1", default="1", required=True, max_length=2)
     sure = discord.ui.TextInput(label="Süre (örn: 30d, 24s, 2g)", placeholder="24s", default="24s", required=True, max_length=10)
 
@@ -429,11 +430,14 @@ class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü �
             toplam_saniye = 86400
 
         bitis_zamani = discord.utils.utcnow() + timedelta(seconds=toplam_saniye)
+        
+        aciklama_metni = f"📝 **Açıklama:** {self.aciklama.value}\n" if self.aciklama.value else ""
 
         embed = discord.Embed(
-            title=f"❄️ WİNFTERFALL ÖDÜLLÜ ÇEKİLİŞ",
+            title=f"❄️ WINTERFALL ÖDÜLLÜ ÇEKİLİŞ",
             description=(
                 f"### 🎁 Ödül: `{self.odul.value}`\n"
+                f"{aciklama_metni}"
                 f"### 👑 Kazanan: `{kazanan_adet}` Kişi\n"
                 f"**Düzenleyen:** {interaction.user.mention}\n"
                 f"**Bitiş:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"

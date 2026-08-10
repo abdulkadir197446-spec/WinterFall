@@ -89,11 +89,11 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# SABİTLER VE KANALLAR
+# SABİTLER VE KANALLAR (WINTERFALL FROST TEMASI)
 # ==========================================
 WINTERFALL_ROL = "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
 EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
-TICKET_KATEGORI_ADI = "AÇIK TICKETLAR"
+TICKET_KATEGORI_ADI = "❄️ WİNFTERFALL DESTEK"
 
 KANALLAR = {
     "girisCıkıs": "「🎈」giriş-çıkış",
@@ -109,10 +109,10 @@ YASAKLI_KELIMELER = ["küfür1", "küfür2"]
 spamMap = {}
 
 KIS_TEMASI = {
-    "adi": "WinterFall Klasik Kış Frost",
-    "renk": discord.Color.from_rgb(30, 61, 89),
+    "adi": "WinterFall Buzul Frost Tasarımı",
+    "renk": discord.Color.from_rgb(15, 76, 129),  # Derin Buz Mavisi
     "emoji": "❄️",
-    "footer": "WinterFall Ecosystem • Frost Edition"
+    "footer": "❄️ WinterFall Ecosystem • Frost Edition • Tüm Hakları Saklıdır"
 }
 
 # ==========================================
@@ -122,9 +122,9 @@ class TicketKapatView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 Ticket'ı Kapat", style=discord.ButtonStyle.danger, custom_id="ticket_kapat_btn")
+    @discord.ui.button(label="🔒 Ticket'ı Kapat", style=discord.ButtonStyle.danger, custom_id="ticket_kapat_btn_frost")
     async def kapat_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Ticket kapatılıyor, 5 saniye içinde kanal silinecek...", ephemeral=True)
+        await interaction.response.send_message("❄️ Ticket kapatılıyor, 5 saniye içinde kanal imha edilecek...", ephemeral=True)
         await asyncio.sleep(5)
         try:
             await interaction.channel.delete()
@@ -134,13 +134,13 @@ class TicketKapatView(discord.ui.View):
 class TicketSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="Destek", description="Genel destek almak için.", emoji="🛠️"),
-            discord.SelectOption(label="Partnerlik", description="Sunucu partnerliği için.", emoji="💖"),
-            discord.SelectOption(label="Kill Montage", description="Kill Montage gönderimi için.", emoji="📷"),
-            discord.SelectOption(label="Ekip Alım", description="Ekibimize katılmak için başvuru yap.", emoji="📥"),
-            discord.SelectOption(label="Merge", description="Sunucu birleşim / merge teklifleri için.", emoji="🔗")
+            discord.SelectOption(label="Destek", description="Genel yardıma mı ihtiyacın var? Tıkla.", emoji="🛠️"),
+            discord.SelectOption(label="Partnerlik", description="Sunucu ortaklığı ve partnerlik işlemleri.", emoji="💖"),
+            discord.SelectOption(label="Kill Montage", description="Kill montage videolarını buraya ilet.", emoji="📷"),
+            discord.SelectOption(label="Ekip Alım", description="WinterFall kadrosuna dahil ol.", emoji="📥"),
+            discord.SelectOption(label="Merge", description="Sunucu birleşim teklifleri.", emoji="🔗")
         ]
-        super().__init__(placeholder="Destek kategorisi seçin...", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu")
+        super().__init__(placeholder="❄️ İşlem yapmak istediğin kategoriyi seç...", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu_frost")
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -160,35 +160,18 @@ class TicketSelect(discord.ui.Select):
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
 
-        kategori_adi = f"ticket-{secilen_kategori.lower().replace(' ', '-')}-{interaction.user.name}"
+        kategori_adi = f"❄️│ticket-{secilen_kategori.lower().replace(' ', '-')}-{interaction.user.name}"
         ticket_channel = await guild.create_text_channel(name=kategori_adi, category=kategori, overwrites=overwrites)
 
-        if secilen_kategori == "Partnerlik":
-            embed = discord.Embed(
-                title="💖 Partnerlik Başvuru Talebi",
-                description="Aramıza katılmak için şartları sağlayıp sunucu davetinizi bırakın.",
-                color=discord.Color.from_rgb(255, 105, 180)
-            )
-            await interaction.followup.send(f"**{secilen_kategori}** için destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-            await ticket_channel.send(embed=embed, view=TicketKapatView())
-            await ticket_channel.send("Selam! Partnerlik şartlarımız şunlardır:\n1. Sunucunuz aktif olmalı.\n2. Davet linkini buraya bırakabilirsiniz.")
-        elif secilen_kategori == "Kill Montage":
-            embed = discord.Embed(
-                title="📷 Kill Montage Gönderim Talebi",
-                description="Montage videolarınızı veya çalışmalarınızı bu kanala iletebilirsiniz.",
-                color=discord.Color.from_rgb(0, 200, 255)
-            )
-            await interaction.followup.send(f"**{secilen_kategori}** için kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-            await ticket_channel.send(embed=embed, view=TicketKapatView())
-            await ticket_channel.send("Lütfen kill montage video veya dosyalarınızı buraya yükleyin.")
-        else:
-            await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-            embed = discord.Embed(
-                title=f"❄️ {secilen_kategori} Talebi",
-                description=f"Değerli **{interaction.user.name}**, yetkililerimiz en kısa sürede sizinle ilgilenecektir.",
-                color=discord.Color.blue()
-            )
-            await ticket_channel.send(embed=embed, view=TicketKapatView())
+        embed = discord.Embed(
+            title=f"❄️ WinterFall | {secilen_kategori} Talebi",
+            description=f"Değerli **{interaction.user.name}**, kış ekibimiz en kısa sürede seninle ilgilenecektir.",
+            color=KIS_TEMASI['renk']
+        )
+        embed.set_footer(text=KIS_TEMASI['footer'])
+        
+        await interaction.followup.send(f"❄️ Destek kanalın oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+        await ticket_channel.send(embed=embed, view=TicketKapatView())
 
 class TicketView(discord.ui.View):
     def __init__(self):
@@ -213,12 +196,12 @@ async def on_member_join(member):
         channel = discord.utils.get(member.guild.text_channels, name=KANALLAR["girisCıkıs"])
         if channel:
             embed = discord.Embed(
-                title='❄️ Yeni Savaşçı Katıldı! ❄️',
-                description=f'Sunucuya hoş geldin **{member.name}**! Seninle beraber **{member.guild.member_count}** kişi olduk!',
-                color=discord.Color.from_rgb(30, 61, 89)
+                title='❄️ YENİ BİR BUZ SAVAŞÇISI KATILDI! ❄️',
+                description=f'Sunucumuza hoş geldin **{member.name}**!\nSeninle beraber buz krallığımız **{member.guild.member_count}** kişiye ulaştı!',
+                color=KIS_TEMASI['renk']
             )
             embed.set_thumbnail(url=member.display_avatar.url)
-            embed.set_footer(text='WinterFall Güvenlik ve Kar Sistemi', icon_url=member.guild.icon.url if member.guild.icon else None)
+            embed.set_footer(text=KIS_TEMASI['footer'], icon_url=member.guild.icon.url if member.guild.icon else None)
             embed.timestamp = discord.utils.utcnow()
             await channel.send(content=f"<@{member.id}>", embeds=[embed])
     except Exception as e:
@@ -230,12 +213,12 @@ async def on_member_remove(member):
         channel = discord.utils.get(member.guild.text_channels, name=KANALLAR["girisCıkıs"])
         if channel:
             embed = discord.Embed(
-                title='❄️ Bir Savaşçı Ayrıldı ❄️',
-                description=f'**{member.name}** aramızdan ayrıldı. Sensiz **{member.guild.member_count}** kişi kaldık. Güle güle!',
-                color=discord.Color.from_rgb(139, 0, 0)
+                title='❄️ BİR SAVAŞÇI FIRTINAYA YENİK DÜŞTÜ ❄️',
+                description=f'**{member.name}** aramızdan ayrıldı. Geriye **{member.guild.member_count}** kişi kaldık.',
+                color=discord.Color.from_rgb(180, 40, 40)
             )
             embed.set_thumbnail(url=member.display_avatar.url)
-            embed.set_footer(text='WinterFall Veda Sistemi', icon_url=member.guild.icon.url if member.guild.icon else None)
+            embed.set_footer(text=KIS_TEMASI['footer'], icon_url=member.guild.icon.url if member.guild.icon else None)
             embed.timestamp = discord.utils.utcnow()
             await channel.send(embeds=[embed])
     except Exception as e:
@@ -247,10 +230,11 @@ async def on_message_delete(message):
         return
     log_kanal = discord.utils.get(message.guild.text_channels, name=KANALLAR["mesajLog"])
     if log_kanal:
-        embed = discord.Embed(title="🗑️ Mesaj Silindi", color=discord.Color.red(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Yazan", value=f"{message.author} (`{message.author.id}`)", inline=False)
+        embed = discord.Embed(title="❄️🗑️ Buz Krallığı | Mesaj Silindi", color=discord.Color.red(), timestamp=discord.utils.utcnow())
+        embed.add_field(name="Yazan Savaşçı", value=f"{message.author} (`{message.author.id}`)", inline=False)
         embed.add_field(name="Kanal", value=message.channel.mention, inline=False)
         embed.add_field(name="İçerik", value=message.content or "[Medya/Dosya]", inline=False)
+        embed.set_footer(text=KIS_TEMASI['footer'])
         try:
             await log_kanal.send(embed=embed)
         except Exception:
@@ -262,11 +246,12 @@ async def on_message_edit(before, after):
         return
     log_kanal = discord.utils.get(before.guild.text_channels, name=KANALLAR["mesajLog"])
     if log_kanal:
-        embed = discord.Embed(title="✏️ Mesaj Düzenlendi", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
+        embed = discord.Embed(title="❄️✏️ Buz Krallığı | Mesaj Düzenlendi", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
         embed.add_field(name="Kullanıcı", value=f"{before.author} (`{before.author.id}`)", inline=False)
         embed.add_field(name="Kanal", value=before.channel.mention, inline=False)
-        embed.add_field(name="Önceki", value=before.content or "[Boş]", inline=False)
-        embed.add_field(name="Sonraki", value=after.content or "[Boş]", inline=False)
+        embed.add_field(name="Eski Hali", value=before.content or "[Boş]", inline=False)
+        embed.add_field(name="Yeni Hali", value=after.content or "[Boş]", inline=False)
+        embed.set_footer(text=KIS_TEMASI['footer'])
         try:
             await log_kanal.send(embed=embed)
         except Exception:
@@ -279,124 +264,36 @@ async def on_member_update(before, after):
         if log_kanal:
             eklenen = [r.mention for r in after.roles if r not in before.roles]
             cikarilan = [r.mention for r in before.roles if r not in after.roles]
-            embed = discord.Embed(title="🏷️ Üye Rol Güncellendi", color=discord.Color.blue(), timestamp=discord.utils.utcnow())
+            embed = discord.Embed(title="❄️🏷️ Rol Güncellendi", color=KIS_TEMASI['renk'], timestamp=discord.utils.utcnow())
             embed.add_field(name="Kullanıcı", value=f"{after.mention} (`{after.id}`)", inline=False)
             if eklenen:
                 embed.add_field(name="Eklenen Roller", value=", ".join(eklenen), inline=False)
             if cikarilan:
-                embed.add_field(name="Çıkarılan Roller", value=", ".join(cikarilan), inline=False)
+                embed.add_field(name="Alınan Roller", value=", ".join(cikarilan), inline=False)
+            embed.set_footer(text=KIS_TEMASI['footer'])
             try:
                 await log_kanal.send(embed=embed)
             except Exception:
                 pass
-
-@bot.event
-async def on_guild_role_create(role):
-    log_kanal = discord.utils.get(role.guild.text_channels, name=KANALLAR["rolLog"])
-    if log_kanal:
-        embed = discord.Embed(title="➕ Yeni Rol Oluşturuldu", color=discord.Color.green(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Rol Adı", value=role.name, inline=False)
-        try:
-            await log_kanal.send(embed=embed)
-        except Exception:
-            pass
-
-@bot.event
-async def on_guild_role_delete(role):
-    log_kanal = discord.utils.get(role.guild.text_channels, name=KANALLAR["rolLog"])
-    if log_kanal:
-        embed = discord.Embed(title="➖ Rol Silindi", color=discord.Color.red(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Rol Adı", value=role.name, inline=False)
-        try:
-            await log_kanal.send(embed=embed)
-        except Exception:
-            pass
 
 @bot.event
 async def on_voice_state_update(member, before, after):
     guild = member.guild
     log_kanal = discord.utils.get(guild.text_channels, name=KANALLAR["sesLog"])
 
-    if before.mute != after.mute or before.deaf != after.deaf:
-        islem_yapan = "Bilinmiyor / Kendi İşlemi"
-        try:
-            await asyncio.sleep(0.5)
-            async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
-                if entry.target.id == member.id:
-                    islem_yapan = f"{entry.user.mention} (`{entry.user.id}`)"
-                    break
-        except Exception as e:
-            logger.error(f"Audit log okuma hatası: {e}")
-
-        if log_kanal:
-            embed = discord.Embed(timestamp=discord.utils.utcnow())
-            embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-            
-            if before.mute != after.mute:
-                if after.mute:
-                    embed.title = "🎙️ Ses Kanalında Susturuldu (Mute)"
-                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
-                    embed.color = discord.Color.red()
-                else:
-                    embed.title = "🎙️ Ses Kanalında Susturması Kaldırıldı"
-                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
-                    embed.color = discord.Color.green()
-            
-            elif before.deaf != after.deaf:
-                if after.deaf:
-                    embed.title = "🎧 Ses Kanalında Sağırlaştırıldı (Deafen)"
-                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
-                    embed.color = discord.Color.red()
-                else:
-                    embed.title = "🎧 Ses Kanalında Sağırlaştırması Kaldırıldı"
-                    embed.description = f"**İşlem Gören:** {member.mention} (`{member.id}`)\n**İşlemi Yapan:** {islem_yapan}"
-                    embed.color = discord.Color.green()
-
-            try:
-                await log_kanal.send(embed=embed)
-            except Exception:
-                pass
-        return
-
-    if log_kanal:
-        embed = discord.Embed(timestamp=discord.utils.utcnow())
+    if before.channel != after.channel and log_kanal:
+        embed = discord.Embed(color=KIS_TEMASI['renk'], timestamp=discord.utils.utcnow())
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         if before.channel is None and after.channel is not None:
-            embed.title = "🔊 Ses Kanalına Katıldı"
-            embed.description = f"{member.mention}, **{after.channel.name}** kanalına giriş yaptı."
-            embed.color = discord.Color.green()
+            embed.title = "❄️🔊 Ses Kanalına Giriş Yapıldı"
+            embed.description = f"{member.mention}, **{after.channel.name}** kanalına bağlandı."
         elif before.channel is not None and after.channel is None:
-            embed.title = "🔇 Ses Kanalından Ayrıldı"
+            embed.title = "❄️🔇 Ses Kanalından Çıkıldı"
             embed.description = f"{member.mention}, **{before.channel.name}** kanalından ayrıldı."
-            embed.color = discord.Color.red()
         elif before.channel != after.channel:
-            embed.title = "🔀 Ses Kanalı Değiştirdi"
-            embed.description = f"{member.mention}, **{before.channel.name}** kanalından **{after.channel.name}** kanalına geçti."
-            embed.color = discord.Color.orange()
-        else:
-            return
-        try:
-            await log_kanal.send(embed=embed)
-        except Exception:
-            pass
-
-@bot.event
-async def on_member_ban(guild, user):
-    log_kanal = discord.utils.get(guild.text_channels, name=KANALLAR["moderasyonLog"])
-    if log_kanal:
-        embed = discord.Embed(title="🔨 Üye Banlandı", color=discord.Color.red(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Kullanıcı", value=f"{user} (`{user.id}`)", inline=False)
-        try:
-            await log_kanal.send(embed=embed)
-        except Exception:
-            pass
-
-@bot.event
-async def on_member_unban(guild, user):
-    log_kanal = discord.utils.get(guild.text_channels, name=KANALLAR["moderasyonLog"])
-    if log_kanal:
-        embed = discord.Embed(title="🔓 Üye Banı Kaldırıldı", color=discord.Color.green(), timestamp=discord.utils.utcnow())
-        embed.add_field(name="Kullanıcı", value=f"{user} (`{user.id}`)", inline=False)
+            embed.title = "❄️🔀 Ses Kanalı Değiştirildi"
+            embed.description = f"{member.mention} kullanıcısı **{before.channel.name}** kanalından **{after.channel.name}** kanalına geçti."
+        embed.set_footer(text=KIS_TEMASI['footer'])
         try:
             await log_kanal.send(embed=embed)
         except Exception:
@@ -414,17 +311,15 @@ async def on_message(message):
         ekip_rol_obj = discord.utils.get(message.guild.roles, name=EKIP_ROL)
         if is_winterfall and ekip_rol_obj:
             dm_embed = discord.Embed(
-                title='❄️ WinterFall Ekip Bildirisi',
-                description=f"**Yazan:** {message.author.mention}\n\n[Mesaja Gitmek İçin Tıkla]({message.url})",
-                color=discord.Color.from_rgb(0, 180, 216)
+                title='❄️ WİNFTERFALL EKİP BİLDİRİSİ',
+                description=f"**Yayan Savaşçı:** {message.author.mention}\n\n[Mesaja Gitmek İçin Tıkla]({message.url})",
+                color=KIS_TEMASI['renk']
             )
+            dm_embed.set_footer(text=KIS_TEMASI['footer'])
             for member in message.guild.members:
                 if not member.bot and any(r.name == EKIP_ROL for r in member.roles):
                     try:
-                        await member.send(
-                            content=f"🔔 Hey **{ekip_rol_obj.name}**! Ekip duyuru kanalına bakman gerekiyor.",
-                            embed=dm_embed
-                        )
+                        await member.send(content=f"❄️ Hey **{ekip_rol_obj.name}**! Duyuru kanalına göz at.", embed=dm_embed)
                     except Exception:
                         pass
 
@@ -432,83 +327,37 @@ async def on_message(message):
         if message.channel.name == KANALLAR["galeriChat"] and len(message.attachments) == 0:
             await message.delete()
             try:
-                await message.author.send(f"❄️ `{KANALLAR['galeriChat']}` kanalına yalnızca görsel/medya atabilirsin!")
+                await message.author.send("❄️ Bu kanala yalnızca görsel veya medya dosyaları atabilirsin!")
             except:
                 pass
             return
-
-        if message.channel.name == KANALLAR["sohbet"] and message.content.startswith('/') and not message.content.startswith('/sunucu') and not message.content.startswith('/ai'):
-            await message.delete()
-            try:
-                await message.author.send(f"❄️ Bu sohbet kanalında sadece `/sunucu` ve `/ai` komutları kullanılabilir!")
-            except:
-                pass
-            return
-
-    if not is_winterfall:
-        mesaj_icerigi = message.content.lower()
-        if any(kufur in mesaj_icerigi for kufur in YASAKLI_KELIMELER):
-            await message.delete()
-            uyari = await message.channel.send(f"⚠️ {message.author.mention} Küfür etmek yasak!")
-            await asyncio.sleep(5)
-            await uyari.delete()
-
-            log_kanal = discord.utils.get(message.guild.text_channels, name=KANALLAR["mesajLog"])
-            if log_kanal:
-                log_embed = discord.Embed(title='❄️ WinterFall | Küfür Algılandı', color=discord.Color.from_rgb(255, 77, 77))
-                log_embed.add_field(name='Yapılan (Kullanıcı)', value=f"{message.author} (`{message.author.id}`)", inline=True)
-                log_embed.add_field(name='Kanal', value=f"{message.channel.mention}", inline=True)
-                log_embed.add_field(name='Silinen Mesaj', value=message.content, inline=False)
-                log_embed.timestamp = discord.utils.utcnow()
-                await log_kanal.send(embed=log_embed)
-            return
-
-        user_id = message.author.id
-        currentTime = asyncio.get_event_loop().time()
-        userSpamData = spamMap.get(user_id, {"lastMessage": "", "count": 0, "time": 0})
-
-        if userSpamData["lastMessage"] == message.content and (currentTime - userSpamData["time"]) < 5.0:
-            userSpamData["count"] += 1
-            userSpamData["time"] = currentTime
-            spamMap[user_id] = userSpamData
-
-            if userSpamData["count"] == 2:
-                await message.channel.send(f"⚠️ <@{user_id}>, lütfen spam yapmayı kes! Bu 2. uyarın.")
-            elif userSpamData["count"] >= 3:
-                try:
-                    await message.author.timeout(timedelta(minutes=10), reason="WinterFall Anti-Spam: Üst üste spam yapıldı.")
-                    await message.channel.send(f"❄️ <@{user_id}> üst üste spam yaptığı için **10 dakika** süreyle susturuldu!")
-                    spamMap[user_id] = {"lastMessage": "", "count": 0, "time": 0}
-                except Exception as err:
-                    logger.error(f"Timeout hatası: {err}")
-        else:
-            spamMap[user_id] = {"lastMessage": message.content, "count": 1, "time": currentTime}
 
     bot.dispatch("custom_message", message)
     await bot.process_commands(message)
 
 # ==========================================
-# 6. KOMUTLAR
+# 6. KOMUTLAR VE ÇEKİLİŞ SİSTEMİ
 # ==========================================
-@bot.tree.command(name="ticket-kur", description="Gelişmiş seçim menülü destek (ticket) panelini kurar.")
+@bot.tree.command(name="ticket-kur", description="WinterFall tarzı destek panelini kurar.")
 @app_commands.default_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="❄️ WinterFall Destek Sistemi",
-        description="Aşağıdaki menüden açmak istediğiniz destek kategorisini seçin.",
-        color=discord.Color.from_rgb(100, 150, 255)
+        title="❄️ WİNFTERFALL DESTEK MERKEZİ",
+        description="Aşağıdaki buzdan menüyü kullanarak ihtiyacına uygun destek talebini oluşturabilirsin.",
+        color=KIS_TEMASI['renk']
     )
+    embed.set_footer(text=KIS_TEMASI['footer'])
     await interaction.channel.send(embed=embed, view=TicketView())
-    await interaction.response.send_message("Ticket paneli başarıyla kuruldu!", ephemeral=True)
+    await interaction.response.send_message("❄️ Destek paneli başarıyla yerleştirildi!", ephemeral=True)
 
-# Çekiliş katılımcılarını global olarak takip eden sözlük
+# Çekiliş katılımcılarını takip eden sözlük
 cekilis_katilimlari = {}
 
 class CekilisKatilView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_btn_v12")
+    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v1")
     async def katil_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         msg_id = interaction.message.id
         
@@ -555,37 +404,20 @@ class CekilisKatilView(discord.ui.View):
         
         await interaction.message.edit(embed=yeni_embed, view=self)
 
-class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Oluşturucu"):
-    odul = discord.ui.TextInput(
-        label="Çekiliş Ödülü",
-        placeholder="Örn: 1x Discord Nitro / 100K Nakit",
-        required=True,
-        max_length=100
-    )
-    kazanan_sayisi = discord.ui.TextInput(
-        label="Kazanan Kişi Sayısı",
-        placeholder="Örn: 1 (Kaç kişiye çıkacak?)",
-        default="1",
-        required=True,
-        max_length=2
-    )
-    sure = discord.ui.TextInput(
-        label="Süre (dk: d, saat: s, gün: g)",
-        placeholder="Örn: 30d (dakika) veya 2g (gün)",
-        default="24s",
-        required=True,
-        max_length=10
-    )
+class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü Çekiliş"):
+    odul = discord.ui.TextInput(label="Çekiliş Ödülü", placeholder="Örn: 1x Discord Nitro", required=True, max_length=100)
+    kazanan_sayisi = discord.ui.TextInput(label="Kazanan Sayısı", placeholder="1", default="1", required=True, max_length=2)
+    sure = discord.ui.TextInput(label="Süre (örn: 30d, 24s, 2g)", placeholder="24s", default="24s", required=True, max_length=10)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
             kazanan_adet = int(self.kazanan_sayisi.value)
         except ValueError:
-            await interaction.response.send_message("❌ Kazanan kısmına geçerli bir sayı yazmalısın!", ephemeral=True)
+            await interaction.response.send_message("❌ Geçerli bir kazanan sayısı girin!", ephemeral=True)
             return
 
         sure_str = self.sure.value.strip().lower()
-        toplam_saniye = 0
+        toplam_saniye = 3600
         try:
             if sure_str.endswith('d'):
                 toplam_saniye = int(sure_str[:-1]) * 60
@@ -593,34 +425,60 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
                 toplam_saniye = int(sure_str[:-1]) * 24 * 3600
             elif sure_str.endswith('s'):
                 toplam_saniye = int(sure_str[:-1]) * 3600
-            else:
-                toplam_saniye = int(sure_str) * 3600
         except ValueError:
-            await interaction.response.send_message("❌ Süre formatı hatalı! Örn: `30d`, `24s` veya `2g` kullanın.", ephemeral=True)
-            return
+            toplam_saniye = 86400
 
         bitis_zamani = discord.utils.utcnow() + timedelta(seconds=toplam_saniye)
 
         embed = discord.Embed(
-            title=f"{KIS_TEMASI['emoji']} WinterFall Ödüllü Çekiliş Vakti!",
+            title=f"❄️ WİNFTERFALL ÖDÜLLÜ ÇEKİLİŞ",
             description=(
-                f"🎁 **Verilen Ödül:** `{self.odul.value}`\n"
-                f"👥 **Kazanan Kişi Sayısı:** `{kazanan_adet}` Asil\n"
+                f"🎁 **Ödül:** `{self.odul.value}`\n"
+                f"👥 **Kazanan:** `{kazanan_adet}` Kişi\n"
                 f"👑 **Düzenleyen:** {interaction.user.mention}\n"
-                f"⏳ **Bitiş Süresi:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
+                f"⏳ **Bitiş:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
                 f"👥 **Katılanlar (0):**\nHenüz kimse katılmadı."
             ),
             color=KIS_TEMASI['renk']
         )
-        embed.set_footer(text=f"{KIS_TEMASI['footer']} • Şansınız bol olsun!")
+        embed.set_footer(text=KIS_TEMASI['footer'])
 
         await interaction.channel.send(embed=embed, view=CekilisKatilView())
-        await interaction.response.send_message(f"✅ Çekiliş paneli kuruldu!", ephemeral=True)
+        await interaction.response.send_message("❄️ Çekiliş başarıyla fırtınaya salındı!", ephemeral=True)
 
-@bot.tree.command(name="çekiliş", description="Kış temalı interaktif çekiliş oluşturma panelini açar.")
+@bot.tree.command(name="çekiliş", description="Buz temalı çekiliş paneli açar.")
 @app_commands.default_permissions(manage_guild=True)
 async def cekilis_komutu(interaction: discord.Interaction):
     await interaction.response.send_modal(CekilisOlusturModal())
+
+@bot.tree.command(name="sunucu", description="Sunucu istatistiklerini gösterir.")
+async def sunucu_komutu(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    guild = interaction.guild
+    bot_sayisi = sum(1 for m in guild.members if m.bot)
+    uye_sayisi = guild.member_count - bot_sayisi
+    
+    embed = discord.Embed(
+        title=f"❄️ {guild.name} • Buzul İstatistikleri",
+        color=KIS_TEMASI['renk']
+    )
+    embed.add_field(name="👑 Krallık Lideri", value=guild.owner.mention if guild.owner else "Bilinmiyor", inline=True)
+    embed.add_field(name="👥 Savaşçılar", value=f"Gerçek: **{uye_sayisi}**\nBot: **{bot_sayisi}**", inline=True)
+    embed.set_footer(text=KIS_TEMASI['footer'])
+    await interaction.channel.send(embed=embed)
+    await interaction.followup.send("❄️ İstatistik kartı gönderildi.", ephemeral=True)
+
+@bot.tree.command(name="ai", description="WinterFall yapay zeka asistanı.")
+@app_commands.describe(soru="Yapay zekaya sorulacak soru")
+async def ai_komutu(interaction: discord.Interaction, soru: str):
+    await interaction.response.defer(thinking=True)
+    embed = discord.Embed(
+        title="❄️ WinterFall AI Asistanı",
+        description=f"**Soru:** {soru}\n\n🤖 *Buzul ağları üzerinden analiz edildi: Sistemler stabil ve aktif.*",
+        color=KIS_TEMASI['renk']
+    )
+    embed.set_footer(text=KIS_TEMASI['footer'])
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="sil", description="Belirtilen miktarda mesajı siler.")
 @app_commands.describe(miktar="Silinecek mesaj sayısı (1 - 100 arası)")
@@ -633,33 +491,9 @@ async def sil_komutu(interaction: discord.Interaction, miktar: int):
 
     try:
         silinenler = await interaction.channel.purge(limit=miktar)
-        await interaction.followup.send(f"🧹 Başarıyla **{len(silinenler)}** adet mesaj silindi.", ephemeral=True)
+        await interaction.followup.send(f"❄️ Başarıyla **{len(silinenler)}** adet mesaj buz edildi (silindi).", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
-
-@bot.tree.command(name="sunucu", description="Sunucu istatistiklerini gösterir.")
-async def sunucu_komutu(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    guild = interaction.guild
-    bot_sayisi = sum(1 for m in guild.members if m.bot)
-    uye_sayisi = guild.member_count - bot_sayisi
-    
-    embed = discord.Embed(
-        title=f"🛡️ {guild.name} • İstatistikler",
-        color=discord.Color.from_rgb(0, 150, 255)
-    )
-    embed.add_field(name="👑 Sunucu Sahibi", value=guild.owner.mention if guild.owner else "Bilinmiyor", inline=True)
-    embed.add_field(name="👥 Toplam Üye", value=f"Gerçek: **{uye_sayisi}**\nBot: **{bot_sayisi}**", inline=True)
-    await interaction.channel.send(embed=embed)
-    await interaction.followup.send("✅ Bilgi kartı gönderildi.", ephemeral=True)
-
-@bot.tree.command(name="ai", description="Yapay zeka asistanına soru sorar.")
-@app_commands.describe(soru="Sorulacak soru")
-async def ai_komutu(interaction: discord.Interaction, soru: str):
-    await interaction.response.defer(thinking=True)
-    yanit = f"Analiz edildi: '{soru}' konusunu inceliyorum. WinterFall yapay zeka modülü aktif."
-    embed = discord.Embed(title="🤖 WinterFall AI", description=yanit, color=discord.Color.blue())
-    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="ban", description="Kullanıcıyı yasaklar.")
 @app_commands.default_permissions(ban_members=True)
@@ -667,7 +501,7 @@ async def ban_komutu(interaction: discord.Interaction, member: discord.Member, s
     await interaction.response.defer(ephemeral=True)
     try:
         await member.ban(reason=sebep)
-        await interaction.followup.send(f"✅ {member.name} banlandı.", ephemeral=True)
+        await interaction.followup.send(f"❄️ {member.name} krallıktan kalıcı olarak banlandı.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 
@@ -677,7 +511,7 @@ async def kick_komutu(interaction: discord.Interaction, member: discord.Member, 
     await interaction.response.defer(ephemeral=True)
     try:
         await member.kick(reason=sebep)
-        await interaction.followup.send(f"👢 {member.name} atıldı.", ephemeral=True)
+        await interaction.followup.send(f"❄️ {member.name} sunucudan dışarı atıldı.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 

@@ -55,9 +55,9 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 invite_cache = {}
 
-# Yetkili Kontrol Fonksiyonu
+# Yetkili Kontrol Fonksiyonu (Güncellendi)
 def yetkili_mi_kontrol_etmek(author, guild):
-    izinli_roller = ["❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧", "❄ 𝙈𝙖𝙮𝙤𝙧", "❄𝘾𝙤-𝙈𝙖𝙮𝙤𝙧", "♱ 𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡 Yönetim"]
+    izinli_roller = ["♱ 𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡", "𝐖𝐢𝐧𝐭𝐞𝙧𝐟𝙖𝙡𝙡 Yönetim", "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
     kullanici_rolleri = [role.name for role in author.roles]
     return author.id == guild.owner_id or any(r in kullanici_rolleri for r in izinli_roller)
 
@@ -491,6 +491,84 @@ async def kilitle(interaction: discord.Interaction, durum: str):
     except Exception as e:
         await interaction.followup.send(f"❌ İşlem sırasında bir hata oluştu: {e}", ephemeral=True)
 
+# --- RANKUP / RANKDOWN KOMUTLARI (Sadece Belirlenen Kanalda Çalışır) ---
+@bot.tree.command(name="rankup", description="Kullanıcının rolünü 1 üst seviye role yükseltir.")
+@app_commands.describe(member="Rolü yükseltilecek üye")
+async def rankup(interaction: discord.Interaction, member: discord.Member):
+    # Kanal Kontrolü
+    if interaction.channel.name != "📈-rankup-rankdown":
+        await interaction.response.send_message("❌ Bu komutu sadece `📈-rankup-rankdown` kanalında kullanabilirsin!", ephemeral=True)
+        return
+
+    if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ Bu komutu sadece yetkililer kullanabilir!", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    roller = sorted(guild.roles, key=lambda r: r.position)
+    
+    kullanici_rolleri = [r for r in member.roles if r != guild.default_role]
+    if not kullanici_rolleri:
+        await interaction.response.send_message(f"❌ **{member.display_name}** kullanıcısının yükseltilebilecek bir rolü yok!", ephemeral=True)
+        return
+    
+    en_yuksek_rol = max(kullanici_rolleri, key=lambda r: r.position)
+    
+    try:
+        index = roller.index(en_yuksek_rol)
+        if index + 1 >= len(roller):
+            await interaction.response.send_message(f"❌ **{member.display_name}** zaten en yüksek rolde!", ephemeral=True)
+            return
+        ust_rol = roller[index + 1]
+    except ValueError:
+        await interaction.response.send_message("❌ Rol hiyerarşisi taranamadı.", ephemeral=True)
+        return
+
+    try:
+        await member.add_roles(ust_rol)
+        await interaction.response.send_message(f"⬆️ **{member.display_name}** başarıyla **{ust_rol.name}** rolüne yükseltildi!", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Rol verilirken bir hata oluştu (Botun yetkisi yetmiyor olabilir): {e}", ephemeral=True)
+
+@bot.tree.command(name="rankdown", description="Kullanıcının rolünü 1 alt seviye role düşürür.")
+@app_commands.describe(member="Rolü düşürülecek üye")
+async def rankdown(interaction: discord.Interaction, member: discord.Member):
+    # Kanal Kontrolü
+    if interaction.channel.name != "📈-rankup-rankdown":
+        await interaction.response.send_message("❌ Bu komutu sadece `📈-rankup-rankdown` kanalında kullanabilirsin!", ephemeral=True)
+        return
+
+    if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ Bu komutu sadece yetkililer kullanabilir!", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    roller = sorted(guild.roles, key=lambda r: r.position)
+    
+    kullanici_rolleri = [r for r in member.roles if r != guild.default_role]
+    if not kullanici_rolleri:
+        await interaction.response.send_message(f"❌ **{member.display_name}** kullanıcısının düşürülebilecek bir rolü yok!", ephemeral=True)
+        return
+    
+    en_yuksek_rol = max(kullanici_rolleri, key=lambda r: r.position)
+    
+    try:
+        index = roller.index(en_yuksek_rol)
+        if index - 1 <= 0:
+            await interaction.response.send_message(f"❌ **{member.display_name}** kullanıcısının rolü daha fazla düşürülemez!", ephemeral=True)
+            return
+        alt_rol = roller[index - 1]
+    except ValueError:
+        await interaction.response.send_message("❌ Rol hiyerarşisi taranamadı.", ephemeral=True)
+        return
+
+    try:
+        await member.remove_roles(en_yuksek_rol)
+        await member.add_roles(alt_rol)
+        await interaction.response.send_message(f"⬇️ **{member.display_name}** kullanıcısının rolü **{alt_rol.name}** seviyesine düşürüldü!", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Rol değiştirilirken bir hata oluştu (Botun yetkisi yetmiyor olabilir): {e}", ephemeral=True)
+
 @bot.tree.command(name="ticket_kur", description="Ticket menüsü kurar.")
 async def ticket_kur(interaction: discord.Interaction):
     if not yetkili_mi_kontrol_etmek(interaction.user, interaction.guild):
@@ -611,7 +689,7 @@ async def on_ready():
     bot.add_view(TicketKapatView())
     try: await bot.tree.sync()
     except: pass
-    print(f'Botun rol verme ve giriş-çıkış özellikleri aktif!')
+    print(f'Botun rol verme, kanal kısıtlamalı rankup/rankdown özellikleri aktif!')
 
 if __name__ == '__main__':
     threading.Thread(target=run_flask).start()

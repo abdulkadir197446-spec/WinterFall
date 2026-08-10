@@ -85,14 +85,6 @@ def initialize_database_structure():
             ''')
             
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_ranks (
-                    user_id INTEGER PRIMARY KEY,
-                    rank_level INTEGER DEFAULT 1,
-                    experience_points INTEGER DEFAULT 0
-                )
-            ''')
-            
-            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS guild_log_settings (
                     guild_id INTEGER PRIMARY KEY,
                     mod_log_id INTEGER,
@@ -120,7 +112,88 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# 4. TİCKET SİSTEMİ (BUTONLAR, MENÜLER VE SORULAR)
+# RÜTBE HİYERARŞİSİ TANIMLAMALARI (Co-Mayor ve Mayor Dahil)
+# ==========================================
+RANK_HIERARCHY = [
+    "❄ Winterfall Ekip",
+    "❄ Sorumlu",
+    "❄ Baş Sorumlu",
+    "❄ Moderatör",
+    "❄ Moderatör +",
+    "❄ Asistan",
+    "❄ Asistan +",
+    "❄ Denetleyici",
+    "❄ Co-Mayor",
+    "❄ Mayor" # Otomatik/Komut ile çıkılabilecek en son nokta (Founder ve üstü hariç)
+]
+
+async def update_member_rank(member: discord.Member, direction: str, kanal: discord.TextChannel = None, sebep: str = ""):
+    """
+    direction: 'up' veya 'down'
+    """
+    guild = member.guild
+    member_rank_roles = [r for r in member.roles if r.name in RANK_HIERARCHY]
+    
+    current_index = -1
+    for r in member_rank_roles:
+        idx = RANK_HIERARCHY.index(r.name)
+        if idx > current_index:
+            current_index = idx
+
+    target_index = current_index
+
+    if direction == 'up':
+        if current_index == -1:
+            target_index = 0 
+        elif current_index < len(RANK_HIERARCHY) - 1:
+            target_index = current_index + 1
+        else:
+            return False, "Kullanıcı zaten maksimum otomatik rütbede (Mayor)."
+    elif direction == 'down':
+        if current_index > 0:
+            target_index = current_index - 1
+        else:
+            return False, "Kullanıcı zaten en alt rütbede."
+    else:
+        return False, "Geçersiz yön."
+
+    old_role_name = RANK_HIERARCHY[current_index] if current_index != -1 else None
+    new_role_name = RANK_HIERARCHY[target_index]
+
+    old_role_obj = discord.utils.get(guild.roles, name=old_role_name) if old_role_name else None
+    new_role_obj = discord.utils.get(guild.roles, name=new_role_name)
+
+    if not new_role_obj:
+        return False, f"'{new_role_name}' rolü sunucuda bulunamadı!"
+
+    try:
+        if old_role_obj and old_role_obj in member.roles:
+            await member.remove_roles(old_role_obj, reason=f"Rank {direction} işlemi.")
+        await member.add_roles(new_role_obj, reason=f"Rank {direction} işlemi: {sebep}")
+
+        if not kanal:
+            kanal = discord.utils.get(guild.text_channels, name="「📈」rankup-rankdown")
+
+        if kanal:
+            embed = discord.Embed(
+                title="📈 Rütbe Güncelleme Sistemi" if direction == 'up' else "📉 Rütbe Düşürme Sistemi",
+                color=discord.Color.green() if direction == 'up' else discord.Color.red()
+            )
+            embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+            embed.add_field(name="İşlem Türü", value="Terfi (Rank Up)" if direction == 'up' else "Tenzil (Rank Down)", inline=True)
+            embed.add_field(name="Yeni Rütbe", value=new_role_obj.mention, inline=True)
+            embed.add_field(name="Sebep / Durum", value=sebep, inline=False)
+            embed.set_footer(text="WinterFall Rank Automation Systems")
+            await kanal.send(embed=embed)
+
+        return True, new_role_name
+    except Exception as e:
+        logger.error(f"Rol güncelleme hatası: {e}")
+        return False, str(e)
+
+
+# ==========================================
+# 4. TİCKET SİSTEMİ (BUTONLAR VE MENÜLER)
 # ==========================================
 class TicketView(discord.ui.View):
     def __init__(self, ticket_sahibi_id: int):
@@ -129,7 +202,6 @@ class TicketView(discord.ui.View):
 
     @discord.ui.button(label="🙋‍♂️ Bileti Üstlen", style=discord.ButtonStyle.success, custom_id="persistent_ticket_ustlen_btn")
     async def ustlen_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Sadece "Ticket Yetkili" rolü kontrolü (Yönetici yetkisi dahil hiçbir istisna yoktur)
         yetkili_rol = discord.utils.get(interaction.guild.roles, name="Ticket Yetkili")
         
         if not yetkili_rol or yetkili_rol not in interaction.user.roles:
@@ -177,8 +249,6 @@ class TicketView(discord.ui.View):
     async def kapat_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             kapatan_kullanici = interaction.user
-            logger.info(f"{kapatan_kullanici} ({kapatan_kullanici.id}) tarafından {interaction.channel.name} adlı ticket kapatıldı.")
-            
             await interaction.response.send_message(f"⚠️ Ticket **{kapatan_kullanici.name}** tarafından kapatılıyor, kanal 5 saniye içinde silinecektir...", ephemeral=False)
             await asyncio.sleep(5)
             await interaction.channel.delete(reason=f"Ticket {kapatan_kullanici.name} tarafından kapatıldı.")
@@ -222,78 +292,16 @@ class TicketSelectMenu(discord.ui.Select):
             birlesik_etiket = f"{interaction.user.mention} {yetkili_etiket_metni}"
 
             view_nesnesi = TicketView(ticket_sahibi_id=interaction.user.id)
+            
+            embed_obj = discord.Embed(
+                title=f"🛠️ {secilen_kategori} Destek Talebi",
+                description=f"Değerli **{interaction.user.name}**, yetkili ekibimiz en kısa süre içinde sizinle ilgilenecektir.",
+                color=discord.Color.from_rgb(100, 150, 255)
+            )
+            embed_obj.set_footer(text="WinterFall Support & Security")
 
-            if secilen_kategori == "Ekip Alım":
-                embed_obj = discord.Embed(
-                    title="📥 Ekip Alım Başvuru Talebi",
-                    description="Ekibimize katılmak istiyorsan harika! Lütfen aşağıdaki soruları yanıtla:",
-                    color=discord.Color.from_rgb(0, 200, 255)
-                )
-                embed_obj.add_field(name="Sorular", value="1. Eski ekibin neresi?\n2. Oyun içi ismin?\n3. Hangi sunucularda oynuyorsun?", inline=False)
-                embed_obj.set_footer(text="WinterFall Ekip Alım Sistemleri")
-                await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
-
-            elif secilen_kategori == "Merge":
-                embed_obj = discord.Embed(
-                    title="🔗 Merge (Birleşim) Teklif Talebi",
-                    description="Sunucu birleşim teklifiniz için teşekkürler. Lütfen aşağıdaki bilgileri sağlayın:",
-                    color=discord.Color.from_rgb(150, 50, 250)
-                )
-                embed_obj.add_field(name="Sorular", value="1. Kim kime katılcak?\n2. Sunucunuzun üye sayısı ve aktifliği nedir?\n3. Hangi sunucularda oynuyorsun?", inline=False)
-                embed_obj.set_footer(text="WinterFall Merge Systems")
-                await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
-
-            elif secilen_kategori == "Partnerlik":
-                embed_obj = discord.Embed(
-                    title="💖 Partnerlik Başvuru Talebi",
-                    description="Aramıza katılmak için sunucuya gelip ticket açmanız yeterli.",
-                    color=discord.Color.from_rgb(255, 105, 180)
-                )
-                embed_obj.add_field(name="Talep Eden", value=interaction.user.mention, inline=True)
-                embed_obj.add_field(name="Durum", value="İnceleniyor", inline=True)
-                embed_obj.set_footer(text="WinterFall Partner Systems")
-
-                await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
-                
-                partnerlik_metni_icerigi = (
-                    "👑 KingDooms\n"
-                    "\"Krallıklar yükselir imparatorluklar yıkılır.. Fakat KingDooms daima ayakta kalır\"\n\n"
-                    "⚔️ • Büyük savaşlar\n\n"
-                    "🏰 • Güçlü krallık sistemi\n\n"
-                    "🛡️ • Sadakat • Onur • Birlik\n\n"
-                    "🎁 • Çekilişler ve ödüller\n\n"
-                    "🤝 • Partner toplulukları\n\n"
-                    "Kılıcını kuşan ve KingDooms 'un saflarına katıl!\n\n"
-                    "🔗 Davet: https://discord.gg/Tcq2fcdR2c"
-                )
-                await ticket_channel.send(partnerlik_metni_icerigi)
-
-            elif secilen_kategori == "Ally":
-                embed_obj = discord.Embed(
-                    title="🤝 Ally (Müttefik) Başvuru Talebi",
-                    description="Ally olmak için aşağıdaki bilgileri paylaşabilirsiniz:",
-                    color=discord.Color.from_rgb(50, 205, 50)
-                )
-                embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Hangi sunucularda oynuyorsun?", inline=False)
-                embed_obj.set_footer(text="WinterFall Ally Systems")
-                await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
-
-            else:
-                embed_obj = discord.Embed(
-                    title="🛠️ Genel Destek Talebi",
-                    description=f"Değerli **{interaction.user.name}**, yetkili ekibimiz en kısa süre içinde sizinle ilgilenecektir.\n\nLütfen sorununuzu veya talebinizi detaylı bir şekilde yazın.",
-                    color=discord.Color.from_rgb(100, 150, 255)
-                )
-                embed_obj.add_field(name="Oluşturan Kullanıcı", value=interaction.user.mention, inline=False)
-                embed_obj.set_footer(text="WinterFall Support & Security")
-
-                await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
-                
+            await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+            await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=view_nesnesi)
         except Exception as err:
             logger.error(f"Ticket oluşturma callback hatası: {err}")
 
@@ -303,8 +311,10 @@ class TicketMainView(discord.ui.View):
         self.add_item(TicketSelectMenu())
 
 # ==========================================
-# 5. BOT EVENTLERİ (ON_READY & ON_MEMBER_JOIN & ON_MESSAGE)
+# 5. BOT EVENTLERİ (ON_READY, ON_MESSAGE, ROL LOGLAMA)
 # ==========================================
+YASAKLI_KELIMELER = ["küfür1", "küfür2"] # Buraya filtrelemek istediğin kelimeleri ekleyebilirsin
+
 @bot.event
 async def on_ready():
     logger.info(f"Bot Başarıyla Giriş Yaptı: {bot.user.name} (ID: {bot.user.id})")
@@ -320,9 +330,38 @@ async def on_member_join(member):
         otomatik_rol = discord.utils.get(member.guild.roles, name="❄ Member")
         if otomatik_rol:
             await member.add_roles(otomatik_rol, reason="Otomatik üye katılım rolü.")
-            logger.info(f"{member.name} kullanıcısına otomatik rol verildi.")
     except Exception as role_err:
         logger.error(f"Üye katılım rol verme hatası: {role_err}")
+
+@bot.event
+async def on_member_update(before, after):
+    # ROL-LOG SİSTEMİ
+    if before.roles != after.roles:
+        try:
+            rol_log_kanali = discord.utils.get(after.guild.text_channels, name="rol-log")
+            if not rol_log_kanali:
+                return
+
+            eklenen_roller = [r for r in after.roles if r not in before.roles]
+            silinen_roller = [r for r in before.roles if r not in after.roles]
+
+            if eklenen_roller:
+                for rol in eklenen_roller:
+                    embed = discord.Embed(title="➕ Kullanıcıya Rol Verildi", color=discord.Color.green())
+                    embed.add_field(name="Kullanıcı", value=after.mention, inline=False)
+                    embed.add_field(name="Verilen Rol", value=rol.mention, inline=False)
+                    embed.set_footer(text="WinterFall Role Log System")
+                    await rol_log_kanali.send(embed=embed)
+
+            if silinen_roller:
+                for rol in silinen_roller:
+                    embed = discord.Embed(title="➖ Kullanıcıdan Rol Alındı", color=discord.Color.red())
+                    embed.add_field(name="Kullanıcı", value=after.mention, inline=False)
+                    embed.add_field(name="Alınan Rol", value=rol.mention, inline=False)
+                    embed.set_footer(text="WinterFall Role Log System")
+                    await rol_log_kanali.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Rol loglama event hatası: {e}")
 
 @bot.event
 async def on_message(message):
@@ -330,6 +369,26 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
+    # 1. KÜFÜR KONTROLÜ (Otomatik Rank Down)
+    mesaj_icerigi_kucuk = message.content.lower()
+    if any(kelime in mesaj_icerigi_kucuk for kelime in YASAKLI_KELIMELER):
+        try:
+            await message.delete()
+            rank_kanal = discord.utils.get(message.guild.text_channels, name="「📈」rankup-rankdown")
+            success, yeni_durum = await update_member_rank(
+                message.author, 
+                direction='down', 
+                kanal=rank_kanal, 
+                sebep=f"Sohbette yasaklı kelime/küfür kullanımı tespit edildi. Mesaj: ||{message.content}||"
+            )
+            if success:
+                uyari = await message.channel.send(f"⚠️ {message.author.mention} Küfür/Yasaklı kelime kullanımı nedeniyle bir alt rütbeye düşürüldün!")
+                await asyncio.sleep(5)
+                await uyari.delete()
+        except Exception as e:
+            logger.error(f"Küfür yakalama otomatik rankdown hatası: {e}")
+
+    # 2. PARTNER SİSTEMİ VE OTOMATİK RANK UP KONTROLÜ (12 Partner = Rank Up)
     if message.channel.name == "「🤝」partner":
         user_id = message.author.id
         mesaj_icerigi = message.content
@@ -365,11 +424,19 @@ async def on_message(message):
                     )
                     log_embed.add_field(name="Yapan Yetkili", value=message.author.mention, inline=True)
                     log_embed.add_field(name="Toplam Başarılı Partnerlik", value=f"**{real_p}.** Partnerlik", inline=True)
-                    log_embed.set_footer(text="WinterFall Partner Log Systems")
-
+                    
                     sayaç_kanali = discord.utils.get(message.guild.text_channels, name="「⏳」partnerlik-sayaç")
                     if sayaç_kanali:
                         await sayaç_kanali.send(embed=log_embed)
+
+                    if real_p >= 12:
+                        rank_kanal = discord.utils.get(message.guild.text_channels, name="「📈」rankup-rankdown")
+                        await update_member_rank(
+                            message.author, 
+                            direction='up', 
+                            kanal=rank_kanal, 
+                            sebep=f"Başarılı partnerlik sayısı **12** adede ulaştığı için otomatik terfi ettirildi."
+                        )
                 else:
                     await message.delete()
                     uyari_mesaji = await message.channel.send(f"⚠️ {message.author.mention} Aynı metni tekrar girdiğiniz tespit edildi! Bu partnerlik **sahte (fake)** olarak algılandı ve silindi.")
@@ -384,7 +451,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# 6. LOG SİSTEMLERİ
+# 6. LOG SİSTEMLERİ (MESAJ & SES)
 # ==========================================
 @bot.event
 async def on_message_delete(message):
@@ -397,26 +464,9 @@ async def on_message_delete(message):
             embed_log.add_field(name="Yazan Kullanıcı", value=message.author.mention, inline=True)
             embed_log.add_field(name="Kanal", value=message.channel.mention, inline=True)
             embed_log.add_field(name="Silinen İçerik", value=message.content or "*(Metin içeriği yok)*", inline=False)
-            embed_log.set_footer(text=f"Kullanıcı ID: {message.author.id}")
             await log_kanal_bulunan.send(embed=embed_log)
     except Exception as e:
         logger.error(f"Mesaj silme loglama hatası: {e}")
-
-@bot.event
-async def on_message_edit(before_msg, after_msg):
-    if before_msg.author.bot or before_msg.content == after_msg.content:
-        return
-    try:
-        log_kanal_bulunan = discord.utils.get(before_msg.guild.text_channels, name="mesaj-log")
-        if log_kanal_bulunan:
-            embed_log = discord.Embed(title="✏️ Mesaj Düzenlendi", color=discord.Color.orange())
-            embed_log.add_field(name="Kullanıcı", value=before_msg.author.mention, inline=True)
-            embed_log.add_field(name="Kanal", value=before_msg.channel.mention, inline=True)
-            embed_log.add_field(name="Önceki Hali", value=before_msg.content or "*(Boş)*", inline=False)
-            embed_log.add_field(name="Yeni Hali", value=after_msg.content or "*(Boş)*", inline=False)
-            await log_kanal_bulunan.send(embed=embed_log)
-    except Exception as e:
-        logger.error(f"Mesaj düzenleme loglama hatası: {e}")
 
 @bot.event
 async def on_voice_state_update(member, before_state, after_state):
@@ -428,199 +478,114 @@ async def on_voice_state_update(member, before_state, after_state):
         if not before_state.mute and after_state.mute:
             embed_ses = discord.Embed(title="🔇 Ses Kanalında Susturuldu", color=discord.Color.orange())
             embed_ses.add_field(name="Etkilenen Kullanıcı", value=member.mention, inline=False)
-            embed_ses.set_footer(text=f"Kullanıcı ID: {member.id} | WinterFall Voice Log")
             await ses_log_kanali.send(embed=embed_ses)
-
-        if not before_state.deaf and after_state.deaf:
-            embed_ses = discord.Embed(title="🎧 Kulaklığı Kapatıldı", color=discord.Color.orange())
-            embed_ses.add_field(name="Etkilenen Kullanıcı", value=member.mention, inline=False)
-            embed_ses.set_footer(text=f"Kullanıcı ID: {member.id} | WinterFall Voice Log")
-            await ses_log_kanali.send(embed=embed_ses)
-            
     except Exception as e:
-        logger.error(f"Ses loglama işleminde hata: {e}")
+        logger.error(f"Ses loglama hatası: {e}")
 
 # ==========================================
 # 7. SLASH KOMUTLARI
 # ==========================================
+@bot.tree.command(name="duyuru", description="Sunucuda herkesi etiketleyerek duyuru yapar.")
+@app_commands.describe(mesaj="Yapılacak duyurunun içeriği")
+async def duyuru_komutu(interaction: discord.Interaction, mesaj: str):
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    if not gerekli_rol or gerekli_rol not in interaction.user.roles:
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    try:
+        embed = discord.Embed(
+            title="📢 WinterFall Duyuru Sistemi",
+            description=mesaj,
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Duyuruyu Yapan: {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+        
+        await interaction.channel.send(content="@everyone", embed=embed)
+        await interaction.followup.send("✅ Duyurunuz başarıyla gönderildi!", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Duyuru gönderme hatası: {e}")
+        await interaction.followup.send("❌ Duyuru gönderilirken bir hata oluştu.", ephemeral=True)
+
+@bot.tree.command(name="mesaj", description="Belirtilen kullanıcıya bot üzerinden özel mesaj (DM) gönderir.")
+@app_commands.describe(kullanici="Mesaj gönderilecek kullanıcı", mesaj="Gönderilecek metin")
+async def dm_mesaj_komutu(interaction: discord.Interaction, kullanici: discord.Member, mesaj: str):
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    if not gerekli_rol or gerekli_rol not in interaction.user.roles:
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    try:
+        dm_embed = discord.Embed(
+            title="📬 WinterFall Yetkili Mesajı",
+            description=mesaj,
+            color=discord.Color.from_rgb(100, 200, 255)
+        )
+        dm_embed.set_footer(text=f"Gönderen Yetkili Sunucu: {interaction.guild.name}")
+
+        await kullanici.send(embed=dm_embed)
+        await interaction.followup.send(f"✅ **{kullanici.name}** adlı kullanıcıya başarıyla DM gönderildi.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"DM mesaj gönderme hatası: {e}")
+        await interaction.followup.send("❌ Kullanıcının DM kutusu kapalı veya bir hata oluştu.", ephemeral=True)
+
 @bot.tree.command(name="ticket-kur", description="Destek sistem panelini gönderir.")
 @app_commands.default_permissions(administrator=True)
 async def ticket_kurulum_komutu(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    try:
-        panel_embed = discord.Embed(
-            title="❄️ WinterFall Profesyonel Destek & Talep Merkezi",
-            description=(
-                "Sunucumuzda herhangi bir konuda yardıma mı ihtiyacınız var?\n"
-                "Aşağıdaki kategori menüsünü kullanarak hızlı bir şekilde destek talebi (ticket) oluşturabilirsiniz."
-            ),
-            color=discord.Color.from_rgb(88, 101, 242)
-        )
-        panel_embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-        panel_embed.set_footer(text="WinterFall Security & Support Systems", icon_url=interaction.client.user.display_avatar.url)
-        
-        await interaction.channel.send(embed=panel_embed, view=TicketMainView())
-        await interaction.followup.send("✅ Geliştirilmiş ticket paneli bu kanalda başarıyla aktif edildi!", ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ticket kurulum komutu hatası: {e}")
+    panel_embed = discord.Embed(
+        title="❄️ WinterFall Profesyonel Destek & Talep Merkezi",
+        description="Aşağıdaki menüden destek talebi oluşturabilirsiniz.",
+        color=discord.Color.from_rgb(88, 101, 242)
+    )
+    await interaction.channel.send(embed=panel_embed, view=TicketMainView())
+    await interaction.followup.send("✅ Panel kuruldu!", ephemeral=True)
 
-@bot.tree.command(name="kişiekle", description="Aktif ticket kanalına belirttiğiniz kullanıcıyı ekler.")
-@app_commands.describe(kullanici="Kanala eklenecek kullanıcı")
-async def kisiekle_komutu(interaction: discord.Interaction, kullanici: discord.Member):
-    if not interaction.channel.name.startswith("ticket-"):
-        await interaction.response.send_message("❌ Bu komut sadece ticket kanallarında kullanılabilir!", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    try:
-        kanal = interaction.channel
-        await kanal.set_permissions(kullanici, view_channel=True, send_messages=True, read_message_history=True)
-        
-        await kanal.send(f"➕ {kullanici.mention} bu bilete eklendi!")
-        await interaction.followup.send(f"✅ {kullanici.name} başarıyla ticket kanalına dahil edildi.", ephemeral=True)
-    except Exception as e:
-        logger.error(f"Kişi ekleme komut hatası: {e}")
-        await interaction.followup.send("❌ Kullanıcı eklenirken bir hata oluştu.", ephemeral=True)
-
-@bot.tree.command(name="partnersayaç", description="Partnerlik istatistiklerinizi gösterir.")
-@app_commands.describe(kullanici="İstatistiklerine bakılacak kullanıcı")
-async def partnersayac_komutu(interaction: discord.Interaction, kullanici: discord.Member = None):
-     hedef_kanal_adi = "「💻」bot-komut"
-     if interaction.channel.name != hedef_kanal_adi:
-         await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
-         return
-
-     hedef_kullanici = kullanici or interaction.user
-     await interaction.response.defer(ephemeral=False)
-     conn = get_database_connection()
-     if not conn:
-         await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
-         return
-
-     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT real_partner, fake_partner FROM partner_stats WHERE user_id = ?", (hedef_kullanici.id,))
-        result = cursor.fetchone()
-
-        real_p = result[0] if result else 0
-        fake_p = result[1] if result else 0
-
-        embed = discord.Embed(
-            title="📊 Partnerlik İstatistik Sistemi",
-            description=f"**{hedef_kullanici.mention}** adlı kullanıcının partnerlik verileri:",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="✅ Başarılı Partner", value=str(real_p), inline=True)
-        embed.add_field(name="⚠️ Sahte (Fake) Partner", value=str(fake_p), inline=True)
-        embed.set_thumbnail(url=hedef_kullanici.display_avatar.url)
-        embed.set_footer(text="WinterFall Partner Systems")
-
-        await interaction.followup.send(embed=embed)
-     except Exception as e:
-        logger.error(f"Partner sayaç komut hatası: {e}")
-        await interaction.followup.send("❌ İstatistikler alınırken bir hata oluştu.", ephemeral=True)
-     finally:
-        conn.close()
-
-@bot.tree.command(name="psıfırla", description="Tüm kullanıcıların partnerlik istatistiklerini sıfırlar.")
-async def psifirla_komutu(interaction: discord.Interaction):
-    gerekli_rol_adi = "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
-    kullanici_rolleri = [rol.name for rol in interaction.user.roles]
-    
-    if gerekli_rol_adi not in kullanici_rolleri and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message(f"❌ Bu komutu kullanabilmek için **{gerekli_rol_adi}** rolüne sahip olmalısın!", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    conn = get_database_connection()
-    if not conn:
-        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
-        return
-
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM partner_stats")
-        conn.commit()
-        await interaction.followup.send("✅ Tüm kullanıcıların partnerlik istatistikleri başarıyla sıfırlandı!", ephemeral=True)
-        logger.info(f"{interaction.user} tarafından partnerlik istatistikleri sıfırlandı.")
-    except Exception as e:
-        logger.error(f"Partner sıfırlama hatası: {e}")
-        await interaction.followup.send("❌ Sıfırlama işlemi sırasında bir hata oluştu.", ephemeral=True)
-    finally:
-        conn.close()
-
-@bot.tree.command(name="rankup", description="Belirtilen kullanıcının rütbe / seviyesini artırır.")
-@app_commands.describe(kullanici="Seviyesi artırılacak kullanıcı", miktar="Artırılacak miktar (Varsayılan: 1)")
-@app_commands.default_permissions(administrator=True)
-async def rankup_komutu(interaction: discord.Interaction, kullanici: discord.Member, miktar: int = 1):
+@bot.tree.command(name="rankup", description="Belirtilen kullanıcının rütbesini artırır.")
+@app_commands.describe(kullanici="Seviyesi artırılacak kullanıcı")
+async def rankup_komutu(interaction: discord.Interaction, kullanici: discord.Member):
     hedef_kanal_adi = "「📈」rankup-rankdown"
     if interaction.channel.name != hedef_kanal_adi:
         await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
-    conn = get_database_connection()
-    if not conn:
-        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    if not gerekli_rol or gerekli_rol not in interaction.user.roles:
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT rank_level, experience_points FROM user_ranks WHERE user_id = ?", (kullanici.id,))
-        result = cursor.fetchone()
+    await interaction.response.defer(ephemeral=True)
+    rank_kanal = discord.utils.get(interaction.guild.text_channels, name=hedef_kanal_adi)
+    success, result_msg = await update_member_rank(kullanici, direction='up', kanal=rank_kanal, sebep=f"Yetkili komutu ile ({interaction.user}) manuel terfi ettirildi.")
 
-        if result:
-            yeni_seviye = result[0] + miktar
-            xp = result[1]
-            cursor.execute("UPDATE user_ranks SET rank_level = ? WHERE user_id = ?", (yeni_seviye, kullanici.id))
-        else:
-            yeni_seviye = 1 + miktar
-            xp = 0
-            cursor.execute("INSERT INTO user_ranks (user_id, rank_level, experience_points) VALUES (?, ?, ?)", (kullanici.id, yeni_seviye, xp))
+    if success:
+        await interaction.followup.send(f"✅ {kullanici.mention} başarıyla üst rütbeye terfi ettirildi: **{result_msg}**", ephemeral=True)
+    else:
+        await interaction.followup.send(f"❌ İşlem başarısız: {result_msg}", ephemeral=True)
 
-        conn.commit()
-        await interaction.followup.send(f"✅ {kullanici.mention} adlı kullanıcının seviyesi **{yeni_seviye}** olarak güncellendi (+{miktar}).", ephemeral=True)
-        logger.info(f"{interaction.user} tarafından {kullanici} kullanıcısının rankı artırıldı.")
-    except Exception as e:
-        logger.error(f"Rankup komut hatası: {e}")
-        await interaction.followup.send("❌ İşlem sırasında bir hata oluştu.", ephemeral=True)
-    finally:
-        conn.close()
-
-@bot.tree.command(name="rankdown", description="Belirtilen kullanıcının rütbe / seviyesini düşürür.")
-@app_commands.describe(kullanici="Seviyesi düşürülecek kullanıcı", miktar="Düşürülecek miktar (Varsayılan: 1)")
-@app_commands.default_permissions(administrator=True)
-async def rankdown_komutu(interaction: discord.Interaction, kullanici: discord.Member, miktar: int = 1):
+@bot.tree.command(name="rankdown", description="Belirtilen kullanıcının rütbesini düşürür.")
+@app_commands.describe(kullanici="Seviyesi düşürülecek kullanıcı")
+async def rankdown_komutu(interaction: discord.Interaction, kullanici: discord.Member):
     hedef_kanal_adi = "「📈」rankup-rankdown"
     if interaction.channel.name != hedef_kanal_adi:
         await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
-    conn = get_database_connection()
-    if not conn:
-        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    if not gerekli_rol or gerekli_rol not in interaction.user.roles:
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT rank_level, experience_points FROM user_ranks WHERE user_id = ?", (kullanici.id,))
-        result = cursor.fetchone()
+    await interaction.response.defer(ephemeral=True)
+    rank_kanal = discord.utils.get(interaction.guild.text_channels, name=hedef_kanal_adi)
+    success, result_msg = await update_member_rank(kullanici, direction='down', kanal=rank_kanal, sebep=f"Yetkili komutu ile ({interaction.user}) manuel rütbesi düşürüldü.")
 
-        if result:
-            yeni_seviye = max(1, result[0] - miktar)
-            xp = result[1]
-            cursor.execute("UPDATE user_ranks SET rank_level = ? WHERE user_id = ?", (yeni_seviye, kullanici.id))
-            conn.commit()
-            await interaction.followup.send(f"✅ {kullanici.mention} adlı kullanıcının seviyesi düşürüldü. Yeni seviyesi: **{yeni_seviye}**", ephemeral=True)
-            logger.info(f"{interaction.user} tarafından {kullanici} kullanıcısının rankı düşürüldü.")
-        else:
-            await interaction.followup.send(f"⚠️ {kullanici.mention} kullanıcısının veritabanında kayıtlı bir rütbesi bulunmuyor.", ephemeral=True)
-    except Exception as e:
-        logger.error(f"Rankdown komut hatası: {e}")
-        await interaction.followup.send("❌ İşlem sırasında bir hata oluştu.", ephemeral=True)
-    finally:
-        conn.close()
+    if success:
+        await interaction.followup.send(f"✅ {kullanici.mention} rütbesi düşürüldü. Güncel rütbe: **{result_msg}**", ephemeral=True)
+    else:
+        await interaction.followup.send(f"❌ İşlem başarısız: {result_msg}", ephemeral=True)
 
 @bot.tree.command(name="ban", description="Belirtilen kullanıcıyı sunucudan yasaklar.")
 @app_commands.default_permissions(ban_members=True)
@@ -641,17 +606,6 @@ async def kick_komutu(interaction: discord.Interaction, member: discord.Member, 
         await interaction.followup.send(f"👢 **{member.name}** sunucudan atıldı.", ephemeral=True)
     except Exception as e:
         await interaction.followup.send(f"❌ Kick işlemi gerçekleştirilemedi: {e}", ephemeral=True)
-
-@bot.tree.command(name="timeout", description="Kullanıcıya süreli kısıtlama getirir.")
-@app_commands.default_permissions(moderate_members=True)
-async def timeout_komutu(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str = "Belirtilmedi"):
-    await interaction.response.defer(ephemeral=True)
-    try:
-        sure_hesaplama = timedelta(minutes=dakika)
-        await member.timeout(sure_hesaplama, reason=sebep)
-        await interaction.followup.send(f"🔇 {member.mention} kullanıcısına {dakika} dakika süreyle timeout uygulandı.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Timeout işleminde hata: {e}", ephemeral=True)
 
 @bot.tree.command(name="konus", description="Yazdığınız metni ses kanalında okutur.")
 async def konus_tts_komutu(interaction: discord.Interaction, metin: str):

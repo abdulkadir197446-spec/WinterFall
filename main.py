@@ -209,7 +209,6 @@ class TicketSelectMenu(discord.ui.Select):
                 await interaction.followup.send(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
                 
-                # Metnin birbirine girmemesi için satırlar \n\n ile düzenlenmiştir
                 partnerlik_metni_icerigi = (
                     "👑 KingDooms\n"
                     "\"Krallıklar yükselir imparatorluklar yıkılır.. Fakat KingDooms daima ayakta kalır\"\n\n"
@@ -376,7 +375,6 @@ async def partner_komutu(interaction: discord.Interaction, text: str):
     await interaction.response.defer(ephemeral=True)
     user_id = interaction.user.id
     
-    # Komuttan gelen metindeki \\n ifadelerini gerçek satır atlamasına (\n) çevirir
     duzenlenmis_text = text.replace("\\n", "\n")
 
     conn = get_database_connection()
@@ -416,7 +414,6 @@ async def partner_komutu(interaction: discord.Interaction, text: str):
                 }
                 await partner_kanali.edit(overwrites=overwrites)
                 
-                # Metni alt alta düzgün şekilde gönder
                 await partner_kanali.send(duzenlenmis_text)
                 await interaction.followup.send("✅ Partnerlik başarıyla paylaşıldı, sayaç güncellendi ve **「🤝」partner** kanalına gönderildi!", ephemeral=True)
             else:

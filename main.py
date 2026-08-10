@@ -112,10 +112,10 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# RÜTBE HİYERARŞİSİ TANIMLAMALARI
+# RÜTBE HİYERARŞİSİ TANIMLAMALARI (Özel Fontlu)
 # ==========================================
 RANK_HIERARCHY = [
-    "❄ Winterfall Ekip",
+    "❄ 𝙒𝙞𝙣𝙩𝐞𝐫𝐟𝐚𝐥𝐥 𝙀𝙠𝙞𝙥",
     "❄ Sorumlu",
     "❄ Baş Sorumlu",
     "❄ Moderatör",

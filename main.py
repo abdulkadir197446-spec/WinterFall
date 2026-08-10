@@ -41,7 +41,7 @@ app = Flask('')
 @app.route('/')
 def home():
     logger.info("Web sunucusuna ping atıldı (7/24 aktif tutma isteği).")
-    return "WinterFall Pro AI Bot Aktif ve Çalışır Durumda!", 200
+    return "WinterFall Pro AI Bot Aktif and Çalışır Durumda!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -91,7 +91,7 @@ initialize_database_structure()
 # ==========================================
 # SABİTLER VE KANALLAR (WINTERFALL FROST TEMASI)
 # ==========================================
-MANUEL_ROLLER = ["♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "Winterfall Yönetim", "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
+WINTERFALL_ROL = "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
 EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
 TICKET_KATEGORI_ADI = "❄️ WINTERFALL DESTEK"
 
@@ -103,14 +103,14 @@ KANALLAR = {
     "mesajLog": "mesaj-log",
     "rolLog": "rol-log",
     "moderasyonLog": "moderasyon-log",
-    "sesLog": "ses-log",
-    "rankLog": "「📈」rankup-rankdown"
+    "sesLog": "ses-log"
 }
 YASAKLI_KELIMELER = ["küfür1", "küfür2"]
+spamMap = {}
 
 KIS_TEMASI = {
     "adi": "WinterFall Buzul Frost Tasarımı",
-    "renk": discord.Color.from_rgb(15, 76, 129),
+    "renk": discord.Color.from_rgb(15, 76, 129),  # Derin Buz Mavisi
     "emoji": "❄️",
     "footer": "❄️ WinterFall Ecosystem • Frost Edition • Tüm Hakları Saklıdır"
 }
@@ -179,7 +179,7 @@ class TicketView(discord.ui.View):
         self.add_item(TicketSelect())
 
 # ==========================================
-# 5. BOT EVENTLERİ VE OTOMATİK SİSTEMLER
+# 5. BOT EVENTLERİ VE LOG SİSTEMLERİ
 # ==========================================
 @bot.event
 async def on_ready():
@@ -342,28 +342,7 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
-    # Küfür kontrolü ve otomatik RANKDOWN log mekanizması
-    mesaj_icerigi = message.content.lower()
-    if any(kufur in mesaj_icerigi for kufur in YASAKLI_KELIMELER):
-        try:
-            await message.delete()
-            await message.channel.send(f"❄️ {message.author.mention}, küfür ettiğin için otomatik **rankdown** uygulandı!", delete_after=5)
-            
-            # Rankdown Log Kanalına Bildirim Gönderme
-            rank_log_kanal = discord.utils.get(message.guild.text_channels, name=KANALLAR["rankLog"])
-            if rank_log_kanal:
-                log_embed = discord.Embed(
-                    title="❄️📉 Otomatik Rankdown (Ceza) Uygulandı",
-                    description=f"**Kullanıcı:** {message.author.mention} (`{message.author.id}`)\n**Sebep:** Küfür / Yasaklı Kelime Kullanımı\n**Kanal:** {message.channel.mention}",
-                    color=discord.Color.red(),
-                    timestamp=discord.utils.utcnow()
-                )
-                log_embed.set_footer(text=KIS_TEMASI['footer'])
-                await rank_log_kanal.send(embed=log_embed)
-        except Exception as e:
-            logger.error(f"Küfür engelleme ve log hatası: {e}")
-
-    is_winterfall = any(r.name == "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" for r in message.author.roles)
+    is_winterfall = any(r.name == WINTERFALL_ROL for r in message.author.roles)
 
     if message.channel.name == KANALLAR["ekipDuyuru"]:
         ekip_rol_obj = discord.utils.get(message.guild.roles, name=EKIP_ROL)
@@ -394,56 +373,8 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# 6. KOMUTLAR, RANKUP / RANKDOWN VE ÇEKİLİŞ
+# 6. KOMUTLAR VE ÇEKİLİŞ SİSTEMİ
 # ==========================================
-@bot.tree.command(name="rankup", description="Bir kullanıcıya manuel rankup verir ve rank-log kanalına kaydeder.")
-@app.describe(member="Rankup verilecek kullanıcı", rol="Verilecek yeni rol")
-@app_commands.default_permissions(manage_roles=True)
-async def rankup_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
-    await interaction.response.defer(ephemeral=True)
-    try:
-        await member.add_roles(rol)
-        await interaction.followup.send(f"❄️ {member.mention} adlı kullanıcıya başarıyla **{rol.name}** verildi (Rankup).", ephemeral=True)
-        
-        # Rankup Log Kanalına Bildirim Gönderme
-        rank_log_kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["rankLog"])
-        if rank_log_kanal:
-            log_embed = discord.Embed(
-                title="❄️📈 Manuel Rankup Gerçekleşti",
-                description=f"**Kullanıcı:** {member.mention} (`{member.id}`)\n**Verilen Rol:** **{rol.name}**\n**Yetkili:** {interaction.user.mention}",
-                color=KIS_TEMASI['renk'],
-                timestamp=discord.utils.utcnow()
-            )
-            log_embed.set_footer(text=KIS_TEMASI['footer'])
-            await rank_log_kanal.send(embed=log_embed)
-            
-    except Exception as e:
-        await interaction.followup.send(f"❌ Rol verilirken hata oluştu: {e}", ephemeral=True)
-
-@bot.tree.command(name="rankdown", description="Bir kullanıcının rankını düşürür ve rank-log kanalına kaydeder.")
-@app.describe(member="Rankdown uygulanacak kullanıcı", rol="Alınacak rol")
-@app_commands.default_permissions(manage_roles=True)
-async def rankdown_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
-    await interaction.response.defer(ephemeral=True)
-    try:
-        await member.remove_roles(rol)
-        await interaction.followup.send(f"❄️ {member.mention} adlı kullanıcıdan **{rol.name}** alındı (Rankdown).", ephemeral=True)
-        
-        # Rankdown Log Kanalına Bildirim Gönderme
-        rank_log_kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["rankLog"])
-        if rank_log_kanal:
-            log_embed = discord.Embed(
-                title="❄️📉 Manuel Rankdown Gerçekleşti",
-                description=f"**Kullanıcı:** {member.mention} (`{member.id}`)\n**Alınan Rol:** **{rol.name}**\n**Yetkili:** {interaction.user.mention}",
-                color=discord.Color.red(),
-                timestamp=discord.utils.utcnow()
-            )
-            log_embed.set_footer(text=KIS_TEMASI['footer'])
-            await rank_log_kanal.send(embed=log_embed)
-            
-    except Exception as e:
-        await interaction.followup.send(f"❌ Rol alınırken hata oluştu: {e}", ephemeral=True)
-
 @bot.tree.command(name="ticket-kur", description="WinterFall tarzı destek panelini kurar.")
 @app_commands.default_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):

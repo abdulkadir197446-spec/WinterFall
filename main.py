@@ -111,7 +111,7 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# 4. TİCKET SİSTEMİ (BUTONLAR, MENÜLER VE SORULAR)
+# 4. TİCKET SİSTEMİ (BUTONLAR, MENÜLER VE YENİ SORULAR)
 # ==========================================
 class TicketKapatView(discord.ui.View):
     def __init__(self):
@@ -151,8 +151,14 @@ class TicketSelectMenu(discord.ui.Select):
                 guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
             }
 
+            hedef_kategori_nesnesi = discord.utils.get(guild.categories, name="AÇIK TICKETLAR")
             channel_name = f"ticket-{secilen_kategori.lower().replace(' ', '-')}-{interaction.user.name}"
-            ticket_channel = await guild.create_text_channel(name=channel_name, overwrites=overwrites_map)
+            
+            ticket_channel = await guild.create_text_channel(
+                name=channel_name, 
+                overwrites=overwrites_map, 
+                category=hedef_kategori_nesnesi
+            )
 
             yetkili_rol_obj = discord.utils.get(guild.roles, name="Ticket Yetkili")
             yetkili_etiket_metni = yetkili_rol_obj.mention if yetkili_rol_obj else "@Ticket Yetkili"
@@ -161,10 +167,10 @@ class TicketSelectMenu(discord.ui.Select):
             if secilen_kategori == "Ekip Alım":
                 embed_obj = discord.Embed(
                     title="📥 Ekip Alım Başvuru Talebi",
-                    description="Ekibimize katılmak istiyorsan harika! Lütfen aşağıdaki soruları eksiksiz yanıtla:",
+                    description="Ekibimize katılmak istiyorsan harika! Lütfen aşağıdaki soruları yanıtla:",
                     color=discord.Color.from_rgb(0, 200, 255)
                 )
-                embed_obj.add_field(name="Sorular", value="1. Adınız / Yaşınız?\n2. Hangi alanda yetkili olmak istiyorsunuz?\n3. Günlük aktiflik süreniz nedir?\n4. Daha önceki tecrübeleriniz?", inline=False)
+                embed_obj.add_field(name="Sorular", value="1. Eski ekibin neresi?\n2. Oyun içi ismin?\n3. Hangi sunucularda oynuyorsun?", inline=False)
                 embed_obj.set_footer(text="WinterFall Ekip Alım Sistemleri")
                 await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
@@ -175,7 +181,7 @@ class TicketSelectMenu(discord.ui.Select):
                     description="Sunucu birleşim teklifiniz için teşekkürler. Lütfen aşağıdaki bilgileri sağlayın:",
                     color=discord.Color.from_rgb(150, 50, 250)
                 )
-                embed_obj.add_field(name="Sorular", value="1. Sunucunuzun üye sayısı ve aktifliği nedir?\n2. Merge teklifinizdeki amacınız/planınız nedir?\n3. Yetkili ekibiniz kaç kişiden oluşuyor?", inline=False)
+                embed_obj.add_field(name="Sorular", value="1. Kim kime katılcak?\n2. Sunucunuzun üye sayısı ve aktifliği nedir?\n3. Hangi sunucularda oynuyorsunuz?", inline=False)
                 embed_obj.set_footer(text="WinterFall Merge Systems")
                 await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
@@ -213,7 +219,7 @@ class TicketSelectMenu(discord.ui.Select):
                     description="Ally olmak için aşağıdaki bilgileri paylaşabilirsiniz:",
                     color=discord.Color.from_rgb(50, 205, 50)
                 )
-                embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Ally kurallarımızı kabul ediyor musunuz?", inline=False)
+                embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Hangi sunucularda oynuyorsunuz?", inline=False)
                 embed_obj.set_footer(text="WinterFall Ally Systems")
                 await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
@@ -344,7 +350,7 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
         panel_embed.set_footer(text="WinterFall Security & Support Systems • Tüm hakları saklıdır.", icon_url=interaction.client.user.display_avatar.url)
         
         await interaction.channel.send(embed=panel_embed, view=TicketMainView())
-        await interaction.response.send_message("✅ Geliştirilmiş ticket paneli ve doğru kategoriler bu kanalda başarıyla aktif edildi!", ephemeral=True)
+        await interaction.response.send_message("✅ Geliştirilmiş ticket paneli bu kanalda başarıyla aktif edildi!", ephemeral=True)
     except Exception as e:
         logger.error(f"Ticket kurulum komutu hatası: {e}")
 

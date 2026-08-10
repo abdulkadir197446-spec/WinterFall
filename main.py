@@ -254,7 +254,7 @@ class TicketMainView(discord.ui.View):
         self.add_item(TicketSelectMenu())
 
 # ==========================================
-# 5. BOT EVENTLERİ (ON_READY & ON_MEMBER_JOIN)
+# 5. BOT EVENTLERİ (ON_READY & ON_MEMBER_JOIN & ON_MESSAGE)
 # ==========================================
 @bot.event
 async def on_ready():
@@ -274,6 +274,69 @@ async def on_member_join(member):
             logger.info(f"{member.name} kullanıcısına otomatik rol verildi.")
     except Exception as role_err:
         logger.error(f"Üye katılım rol verme hatası: {role_err}")
+
+@bot.event
+async def on_message(message):
+    # Botun kendi mesajlarını yoksay
+    if message.author.bot:
+        await bot.process_commands(message)
+        return
+
+    # Sadece 「🤝」partner kanalına atılan mesajları takip et
+    if message.channel.name == "「🤝」partner":
+        user_id = message.author.id
+        mesaj_icerigi = message.content
+
+        conn = get_database_connection()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT real_partner, fake_partner, last_text FROM partner_stats WHERE user_id = ?", (user_id,))
+                result = cursor.fetchone()
+
+                is_fake = False
+                if result:
+                    real_p, fake_p, last_t = result
+                    if last_t == mesaj_icerigi:
+                        is_fake = True
+                        fake_p += 1
+                    else:
+                        real_p += 1
+                    cursor.execute("UPDATE partner_stats SET real_partner = ?, fake_partner = ?, last_text = ? WHERE user_id = ?", (real_p, fake_p, mesaj_icerigi, user_id))
+                else:
+                    real_p = 1
+                    fake_p = 0
+                    cursor.execute("INSERT INTO partner_stats (user_id, real_partner, fake_partner, last_text) VALUES (?, ?, ?, ?)", (user_id, real_p, fake_p, mesaj_icerigi))
+                
+                conn.commit()
+
+                if not is_fake:
+                    # Log / Sayaç kanalına (「⏳」partnerlik-sayaç) kaçıncı partnerlik olduğunu bildir
+                    log_embed = discord.Embed(
+                        title="🤝 Yeni Partnerlik Gerçekleştirildi",
+                        description=f"**{message.author.mention}** adlı yetkili yeni bir partnerlik paylaştı!",
+                        color=discord.Color.green()
+                    )
+                    log_embed.add_field(name="Yapan Yetkili", value=message.author.mention, inline=True)
+                    log_embed.add_field(name="Toplam Başarılı Partnerlik", value=f"**{real_p}.** Partnerlik", inline=True)
+                    log_embed.set_footer(text="WinterFall Partner Log Systems")
+
+                    sayaç_kanali = discord.utils.get(message.guild.text_channels, name="「⏳」partnerlik-sayaç")
+                    if sayaç_kanali:
+                        await sayaç_kanali.send(embed=log_embed)
+                else:
+                    # Sahte partnerlik atıldıysa kullanıcıyı uyar ve mesajı sil (isteğe bağlı)
+                    await message.delete()
+                    uyari_mesaji = await message.channel.send(f"⚠️ {message.author.mention} Aynı metni tekrar girdiğiniz tespit edildi! Bu partnerlik **sahte (fake)** olarak algılandı ve silindi.")
+                    await asyncio.sleep(5)
+                    await uyari_mesaji.delete()
+
+            except Exception as e:
+                logger.error(f"Partner mesaj dinleme hatası: {e}")
+            finally:
+                conn.close()
+
+    await bot.process_commands(message)
 
 # ==========================================
 # 6. Kapsamlı LOG SİSTEMLERİ
@@ -364,66 +427,6 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f"Ticket kurulum komutu hatası: {e}")
 
-@bot.tree.command(name="partner", description="Sadece partnerlik-sayaç kanalında çalışır ve partnerlik metni paylaşır.")
-@app_commands.describe(text="Paylaşılacak partnerlik metni")
-async def partner_komutu(interaction: discord.Interaction, text: str):
-    hedef_kanal_adi = "「⏳」partnerlik-sayaç"
-    if interaction.channel.name != hedef_kanal_adi:
-        await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-    user_id = interaction.user.id
-    
-    duzenlenmis_text = text.replace("\\n", "\n")
-
-    conn = get_database_connection()
-    if not conn:
-        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
-        return
-
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT real_partner, fake_partner, last_text FROM partner_stats WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-
-        is_fake = False
-        if result:
-            real_p, fake_p, last_t = result
-            if last_t == duzenlenmis_text:
-                is_fake = True
-                fake_p += 1
-            else:
-                real_p += 1
-            cursor.execute("UPDATE partner_stats SET real_partner = ?, fake_partner = ?, last_text = ? WHERE user_id = ?", (real_p, fake_p, duzenlenmis_text, user_id))
-        else:
-            real_p = 1
-            fake_p = 0
-            cursor.execute("INSERT INTO partner_stats (user_id, real_partner, fake_partner, last_text) VALUES (?, ?, ?, ?)", (user_id, real_p, fake_p, duzenlenmis_text))
-        
-        conn.commit()
-
-        if is_fake:
-            await interaction.followup.send("⚠️ Aynı metni tekrar girdiğiniz tespit edildi! Bu partnerlik **sahte (fake)** olarak kaydedildi ve metin gönderilmedi.", ephemeral=True)
-        else:
-            partner_kanali = discord.utils.get(interaction.guild.text_channels, name="「🤝」partner")
-            if partner_kanali:
-                overwrites = {
-                    interaction.guild.default_role: discord.PermissionOverwrite(send_messages=False),
-                    interaction.guild.me: discord.PermissionOverwrite(send_messages=True)
-                }
-                await partner_kanali.edit(overwrites=overwrites)
-                
-                await partner_kanali.send(duzenlenmis_text)
-                await interaction.followup.send("✅ Partnerlik başarıyla paylaşıldı, sayaç güncellendi ve **「🤝」partner** kanalına gönderildi!", ephemeral=True)
-            else:
-                await interaction.followup.send("⚠️ Sayaç güncellendi ancak **「🤝」partner** adlı kanal bulunamadı! Lütfen kanal ismini kontrol edin.", ephemeral=True)
-    except Exception as e:
-        logger.error(f"Partner komut hatası: {e}")
-        await interaction.followup.send("❌ İşlem sırasında bir hata oluştu.", ephemeral=True)
-    finally:
-        conn.close()
-
 @bot.tree.command(name="partnersayaç", description="Belirtilen veya kendi partnerlik istatistiklerinizi gösterir.")
 @app_commands.describe(kullanici="İstatistiklerine bakılacak kullanıcı (isteğe bağlı)")
 async def partnersayac_komutu(interaction: discord.Interaction, kullanici: discord.Member = None):
@@ -462,6 +465,34 @@ async def partnersayac_komutu(interaction: discord.Interaction, kullanici: disco
         logger.error(f"Partner sayaç komut hatası: {e}")
         await interaction.followup.send("❌ İstatistikler alınırken bir hata oluştu.", ephemeral=True)
      finally:
+        conn.close()
+
+@bot.tree.command(name="psıfırla", description="Tüm kullanıcıların partnerlik istatistiklerini sıfırlar.")
+async def psifirla_komutu(interaction: discord.Interaction):
+    # Yetki Kontrolü: Sadece '♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥' rolüne sahip olanlar kullanabilir
+    gerekli_rol_adi = "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥"
+    kullanici_rolleri = [rol.name for rol in interaction.user.roles]
+    
+    if gerekli_rol_adi not in kullanici_rolleri and not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(f"❌ Bu komutu kullanabilmek için **{gerekli_rol_adi}** rolüne sahip olmalısın!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    conn = get_database_connection()
+    if not conn:
+        await interaction.followup.send("❌ Veritabanı bağlantı hatası oluştu.", ephemeral=True)
+        return
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM partner_stats")
+        conn.commit()
+        await interaction.followup.send("✅ Tüm kullanıcıların partnerlik istatistikleri başarıyla sıfırlandı!", ephemeral=True)
+        logger.info(f"{interaction.user} ({interaction.user.id}) tarafından partnerlik istatistikleri sıfırlandı.")
+    except Exception as e:
+        logger.error(f"Partner sıfırlama hatası: {e}")
+        await interaction.followup.send("❌ Sıfırlama işlemi sırasında bir hata oluştu.", ephemeral=True)
+    finally:
         conn.close()
 
 @bot.tree.command(name="ban", description="Belirtilen kullanıcıyı sunucudan kalıcı olarak yasaklar.")

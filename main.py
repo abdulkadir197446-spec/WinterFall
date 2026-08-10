@@ -112,7 +112,7 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# RÜTBE HİYERARŞİSİ TANIMLAMALARI (Co-Mayor ve Mayor Dahil)
+# RÜTBE HİYERARŞİSİ TANIMLAMALARI
 # ==========================================
 RANK_HIERARCHY = [
     "❄ Winterfall Ekip",
@@ -124,13 +124,10 @@ RANK_HIERARCHY = [
     "❄ Asistan +",
     "❄ Denetleyici",
     "❄ Co-Mayor",
-    "❄ Mayor" # Otomatik/Komut ile çıkılabilecek en son nokta (Founder ve üstü hariç)
+    "❄ Mayor"
 ]
 
 async def update_member_rank(member: discord.Member, direction: str, kanal: discord.TextChannel = None, sebep: str = ""):
-    """
-    direction: 'up' veya 'down'
-    """
     guild = member.guild
     member_rank_roles = [r for r in member.roles if r.name in RANK_HIERARCHY]
     
@@ -193,7 +190,7 @@ async def update_member_rank(member: discord.Member, direction: str, kanal: disc
 
 
 # ==========================================
-# 4. TİCKET SİSTEMİ (BUTONLAR VE MENÜLER)
+# 4. TİCKET SİSTEMİ
 # ==========================================
 class TicketView(discord.ui.View):
     def __init__(self, ticket_sahibi_id: int):
@@ -313,7 +310,7 @@ class TicketMainView(discord.ui.View):
 # ==========================================
 # 5. BOT EVENTLERİ (ON_READY, ON_MESSAGE, ROL LOGLAMA)
 # ==========================================
-YASAKLI_KELIMELER = ["küfür1", "küfür2"] # Buraya filtrelemek istediğin kelimeleri ekleyebilirsin
+YASAKLI_KELIMELER = ["küfür1", "küfür2"]
 
 @bot.event
 async def on_ready():
@@ -488,9 +485,9 @@ async def on_voice_state_update(member, before_state, after_state):
 @bot.tree.command(name="duyuru", description="Sunucuda herkesi etiketleyerek duyuru yapar.")
 @app_commands.describe(mesaj="Yapılacak duyurunun içeriği")
 async def duyuru_komutu(interaction: discord.Interaction, mesaj: str):
-    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥")
     if not gerekli_rol or gerekli_rol not in interaction.user.roles:
-        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -511,9 +508,9 @@ async def duyuru_komutu(interaction: discord.Interaction, mesaj: str):
 @bot.tree.command(name="mesaj", description="Belirtilen kullanıcıya bot üzerinden özel mesaj (DM) gönderir.")
 @app_commands.describe(kullanici="Mesaj gönderilecek kullanıcı", mesaj="Gönderilecek metin")
 async def dm_mesaj_komutu(interaction: discord.Interaction, kullanici: discord.Member, mesaj: str):
-    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥")
     if not gerekli_rol or gerekli_rol not in interaction.user.roles:
-        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -551,9 +548,9 @@ async def rankup_komutu(interaction: discord.Interaction, kullanici: discord.Mem
         await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
         return
 
-    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥")
     if not gerekli_rol or gerekli_rol not in interaction.user.roles:
-        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
@@ -573,9 +570,9 @@ async def rankdown_komutu(interaction: discord.Interaction, kullanici: discord.M
         await interaction.response.send_message(f"❌ Bu komut sadece **{hedef_kanal_adi}** kanalında kullanılabilir!", ephemeral=True)
         return
 
-    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥")
+    gerekli_rol = discord.utils.get(interaction.guild.roles, name="♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥")
     if not gerekli_rol or gerekli_rol not in interaction.user.roles:
-        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚ල්𝐥** rolüne sahip olmalısın!", ephemeral=True)
+        await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)

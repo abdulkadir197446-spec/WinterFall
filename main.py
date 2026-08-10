@@ -111,7 +111,7 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# 4. TİCKET SİSTEMİ (BUTONLAR, MENÜLER VE LOGİK)
+# 4. TİCKET SİSTEMİ (BUTONLAR, MENÜLER VE SORULAR)
 # ==========================================
 class TicketKapatView(discord.ui.View):
     def __init__(self):
@@ -132,11 +132,11 @@ class TicketKapatView(discord.ui.View):
 class TicketSelectMenu(discord.ui.Select):
     def __init__(self):
         options_list = [
-            discord.SelectOption(label="Destek", description="Genel teknik veya sunucu yardımı almak için.", emoji="🛠️"),
+            discord.SelectOption(label="Ekip Alım", description="Ekibimize katılmak için başvuru yap.", emoji="📥"),
+            discord.SelectOption(label="Merge", description="Sunucu birleşim / merge teklifleri için.", emoji="🔗"),
             discord.SelectOption(label="Partnerlik", description="Sunucu partnerlik başvurusu yapmak için.", emoji="💖"),
-            discord.SelectOption(label="Şikayet", description="Yetkili şikayeti veya öneri bildirmek için.", emoji="⚠️"),
-            discord.SelectOption(label="Kayıt", description="Sunucu kayıt işlemleri için.", emoji="📝"),
-            discord.SelectOption(label="Yetkili Alım", description="Ekibimize katılmak için başvuru.", emoji="🛡️")
+            discord.SelectOption(label="Ally", description="Ally (Müttefik) olmak için başvuru.", emoji="🤝"),
+            discord.SelectOption(label="Genel Destek", description="Genel teknik veya sunucu yardımı almak için.", emoji="🛠️")
         ]
         super().__init__(placeholder="Destek kategorisi seçin...", min_values=1, max_values=1, options=options_list, custom_id="persistent_ticket_select_menu")
 
@@ -151,10 +151,36 @@ class TicketSelectMenu(discord.ui.Select):
                 guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
             }
 
-            channel_name = f"ticket-{secilen_kategori.lower()}-{interaction.user.name}"
+            channel_name = f"ticket-{secilen_kategori.lower().replace(' ', '-')}-{interaction.user.name}"
             ticket_channel = await guild.create_text_channel(name=channel_name, overwrites=overwrites_map)
 
-            if secilen_kategori == "Partnerlik":
+            yetkili_rol_obj = discord.utils.get(guild.roles, name="Ticket Yetkili")
+            yetkili_etiket_metni = yetkili_rol_obj.mention if yetkili_rol_obj else "@Ticket Yetkili"
+            birlesik_etiket = f"{interaction.user.mention} {yetkili_etiket_metni}"
+
+            if secilen_kategori == "Ekip Alım":
+                embed_obj = discord.Embed(
+                    title="📥 Ekip Alım Başvuru Talebi",
+                    description="Ekibimize katılmak istiyorsan harika! Lütfen aşağıdaki soruları eksiksiz yanıtla:",
+                    color=discord.Color.from_rgb(0, 200, 255)
+                )
+                embed_obj.add_field(name="Sorular", value="1. Adınız / Yaşınız?\n2. Hangi alanda yetkili olmak istiyorsunuz?\n3. Günlük aktiflik süreniz nedir?\n4. Daha önceki tecrübeleriniz?", inline=False)
+                embed_obj.set_footer(text="WinterFall Ekip Alım Sistemleri")
+                await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+
+            elif secilen_kategori == "Merge":
+                embed_obj = discord.Embed(
+                    title="🔗 Merge (Birleşim) Teklif Talebi",
+                    description="Sunucu birleşim teklifiniz için teşekkürler. Lütfen aşağıdaki bilgileri sağlayın:",
+                    color=discord.Color.from_rgb(150, 50, 250)
+                )
+                embed_obj.add_field(name="Sorular", value="1. Sunucunuzun üye sayısı ve aktifliği nedir?\n2. Merge teklifinizdeki amacınız/planınız nedir?\n3. Yetkili ekibiniz kaç kişiden oluşuyor?", inline=False)
+                embed_obj.set_footer(text="WinterFall Merge Systems")
+                await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+
+            elif secilen_kategori == "Partnerlik":
                 embed_obj = discord.Embed(
                     title="💖 Partnerlik Başvuru Talebi",
                     description="Aramıza katılmak için sunucuya gelip ticket açmanız yeterli.",
@@ -164,12 +190,7 @@ class TicketSelectMenu(discord.ui.Select):
                 embed_obj.add_field(name="Durum", value="İnceleniyor", inline=True)
                 embed_obj.set_footer(text="WinterFall Partner Systems")
 
-                await interaction.response.send_message(f"**{secilen_kategori}** için destek kanalınız başarıyla oluşturuldu: {ticket_channel.mention}", ephemeral=True)
-                
-                yetkili_rol_obj = discord.utils.get(guild.roles, name="Ticket Yetkili")
-                yetkili_etiket_metni = yetkili_rol_obj.mention if yetkili_rol_obj else "@Ticket Yetkili"
-                birlesik_etiket = f"{interaction.user.mention} {yetkili_etiket_metni}"
-                
+                await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
                 await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
                 
                 partnerlik_metni_icerigi = (
@@ -185,17 +206,29 @@ class TicketSelectMenu(discord.ui.Select):
                     "https://discord.gg/NgfQafxkDV"
                 )
                 await ticket_channel.send(partnerlik_metni_icerigi)
-            else:
-                await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+
+            elif secilen_kategori == "Ally":
                 embed_obj = discord.Embed(
-                    title=f"🛡️ {secilen_kategori} Talep Paneli",
+                    title="🤝 Ally (Müttefik) Başvuru Talebi",
+                    description="Ally olmak için aşağıdaki bilgileri paylaşabilirsiniz:",
+                    color=discord.Color.from_rgb(50, 205, 50)
+                )
+                embed_obj.add_field(name="Sorular", value="1. Sunucu davet linkiniz nedir?\n2. Sunucu üye ve aktiflik durumunuz?\n3. Ally kurallarımızı kabul ediyor musunuz?", inline=False)
+                embed_obj.set_footer(text="WinterFall Ally Systems")
+                await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
+
+            else:  # Genel Destek
+                embed_obj = discord.Embed(
+                    title="🛠️ Genel Destek Talebi",
                     description=f"Değerli **{interaction.user.name}**, yetkili ekibimiz en kısa süre içinde sizinle ilgilenecektir.\n\nLütfen sorununuzu veya talebinizi detaylı bir şekilde yazın.",
                     color=discord.Color.from_rgb(100, 150, 255)
                 )
                 embed_obj.add_field(name="Oluşturan Kullanıcı", value=interaction.user.mention, inline=False)
                 embed_obj.set_footer(text="WinterFall Support & Security")
 
-                await ticket_channel.send(embed=embed_obj, view=TicketKapatView())
+                await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {ticket_channel.mention}", ephemeral=True)
+                await ticket_channel.send(content=birlesik_etiket, embed=embed_obj, view=TicketKapatView())
                 
         except Exception as err:
             logger.error(f"Ticket oluşturma callback hatası: {err}")
@@ -228,7 +261,7 @@ async def on_member_join(member):
         logger.error(f"Üye katılım rol verme hatası: {role_err}")
 
 # ==========================================
-# 6. KAPSAMLI LOG SİSTEMLERİ
+# 6. Kapsamlı LOG SİSTEMLERİ
 # ==========================================
 
 @bot.event
@@ -298,11 +331,11 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
             description=(
                 "Sunucumuzda herhangi bir konuda yardıma mı ihtiyacınız var?\n"
                 "Aşağıdaki kategori menüsünü kullanarak hızlı bir şekilde destek talebi (ticket) oluşturabilirsiniz.\n\n"
-                "🛠️ **Destek:** Genel teknik ve sunucu içi yardımlar.\n"
+                "📥 **Ekip Alım:** Ekibimize katılmak için başvuru.\n"
+                "🔗 **Merge:** Sunucu birleşim / merge teklifleri.\n"
                 "💖 **Partnerlik:** Sunucu ortaklık ve iş birliği başvuruları.\n"
-                "⚠️ **Şikayet:** Yetkili şikayetleri veya öneri bildirimleri.\n"
-                "📝 **Kayıt:** Sunucu kayıt işlemleri.\n"
-                "🛡️ **Yetkili Alım:** Ekibimize katılmak için başvuru."
+                "🤝 **Ally:** Müttefik (Ally) başvuru işlemleri.\n"
+                "🛠️ **Genel Destek:** Genel teknik ve sunucu içi yardımlar."
             ),
             color=discord.Color.from_rgb(88, 101, 242)
         )
@@ -311,7 +344,7 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
         panel_embed.set_footer(text="WinterFall Security & Support Systems • Tüm hakları saklıdır.", icon_url=interaction.client.user.display_avatar.url)
         
         await interaction.channel.send(embed=panel_embed, view=TicketMainView())
-        await interaction.response.send_message("✅ Geliştirilmiş ve büyütülmüş ticket paneli bu kanalda başarıyla aktif edildi!", ephemeral=True)
+        await interaction.response.send_message("✅ Geliştirilmiş ticket paneli ve doğru kategoriler bu kanalda başarıyla aktif edildi!", ephemeral=True)
     except Exception as e:
         logger.error(f"Ticket kurulum komutu hatası: {e}")
 

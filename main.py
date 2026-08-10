@@ -129,6 +129,12 @@ class TicketView(discord.ui.View):
 
     @discord.ui.button(label="🙋‍♂️ Bileti Üstlen", style=discord.ButtonStyle.success, custom_id="persistent_ticket_ustlen_btn")
     async def ustlen_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Yetkili rolü kontrolü (Sadece Ticket Yetkili veya Yönetici basabilir)
+        yetkili_rol = discord.utils.get(interaction.guild.roles, name="Ticket Yetkili")
+        if yetkili_rol not in interaction.user.roles and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Bu bileti sadece **Ticket Yetkili** rolüne sahip olanlar üstlenebilir!", ephemeral=True)
+            return
+
         await interaction.response.defer(ephemeral=False)
         try:
             guild = interaction.guild

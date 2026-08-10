@@ -6,7 +6,7 @@ from flask import Flask
 import threading
 import sqlite3
 import random
-from gtts import gTTS
+from gTTS import gTTS
 import os.path
 from datetime import timedelta
 import logging
@@ -120,7 +120,6 @@ class TicketKapatView(discord.ui.View):
     @discord.ui.button(label="🔒 Desteği Kapat", style=discord.ButtonStyle.danger, custom_id="persistent_ticket_kapat_btn")
     async def kapat_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            # Kimin kapattığını loga ve mesaja yansıtıyoruz
             kapatan_kullanici = interaction.user
             logger.info(f"{kapatan_kullanici} ({kapatan_kullanici.id}) tarafından {interaction.channel.name} adlı ticket kapatıldı.")
             
@@ -294,7 +293,6 @@ async def on_voice_state_update(member, before_state, after_state):
 @app_commands.default_permissions(administrator=True)
 async def ticket_kurulum_komutu(interaction: discord.Interaction):
     try:
-        # İkinci fotoğraftaki küçük ticket paneli büyütüldü ve zenginleştirildi:
         panel_embed = discord.Embed(
             title="❄️ WinterFall Profesyonel Destek & Talep Merkezi",
             description=(

@@ -265,15 +265,21 @@ async def on_message(message):
 
     if message.channel.name == KANALLAR["ekipDuyuru"]:
         ekip_rol_obj = discord.utils.get(message.guild.roles, name=EKIP_ROL)
-        if ekip_rol_obj:
-            await message.channel.send(
-                content=f"🔔 Hey **{ekip_rol_obj.name}** üyeleri! Ekip duyuru kanalına yeni bir bildiri düştü, hemen kontrol et!",
-                embed=discord.Embed(
-                    title='❄️ WinterFall Ekip Bildirisi',
-                    description=f"**Yazan:** {message.author.mention}\n\n[Mesaja Gitmek İçin Tıkla]({message.url})",
-                    color=discord.Color.from_rgb(0, 180, 216)
-                )
+        if is_winterfall and ekip_rol_obj:
+            dm_embed = discord.Embed(
+                title='❄️ WinterFall Ekip Bildirisi',
+                description=f"**Yazan:** {message.author.mention}\n\n[Mesaja Gitmek İçin Tıkla]({message.url})",
+                color=discord.Color.from_rgb(0, 180, 216)
             )
+            for member in message.guild.members:
+                if not member.bot and any(r.name == EKIP_ROL for r in member.roles):
+                    try:
+                        await member.send(
+                            content=f"🔔 Hey **{ekip_rol_obj.name}**! Ekip duyuru kanalına bakman gerekiyor.",
+                            embed=dm_embed
+                        )
+                    except Exception:
+                        pass
 
     if not is_winterfall:
         if message.channel.name == KANALLAR["galeriChat"] and len(message.attachments) == 0:
@@ -439,28 +445,16 @@ class CekilisOlusturModal(discord.ui.Modal, title="🎁 WinterFall Çekiliş Olu
         mesaj = await interaction.channel.send(embed=embed, view=CekilisKatilView())
         await interaction.response.send_message(f"✅ **{secilen_tema['adi']}** temalı, **{kazanan_adet}** kazananlı çekiliş paneli başarıyla kuruldu!", ephemeral=True)
 
-        # Süre bitiminde otomatik kazananları seçme arka plan görevi
         async def cekilis_bitir_gorevi():
             await asyncio.sleep(toplam_saniye)
             try:
                 guncel_mesaj = await interaction.channel.fetch_message(mesaj.id)
-                view_item = None
                 for child in guncel_mesaj.components[0].children:
                     if child.custom_id == "winterfall_cekilis_btn_v6":
                         pass
-                # Katılımcı listesini view üzerinden alalım
-                katilanlar_listesi = list(CekilisKatilView.__init__.__globals__.get('katilanlar', [])) if hasattr(CekilisKatilView, '__init__') else []
-                
-                # Alternatif olarak view nesnesinin içindeki seti yakalayalım
-                # Aktif view örneğinden katılımcıları çekmek için:
-                aktif_view = discord.ui.View.from_message(guncel_mesaj)
-                # Basitçe butondan veri çekemiyorsak reaksiyon/buton tıklama listesini saklayabiliriz veya anlık view üzerinden okuyabiliriz.
-                # Burada view içindeki set'e erişim için view nesnesini referans alabiliriz:
-                # view_obj = ... 
             except Exception as e:
                 logger.error(f"Çekiliş otomatik bitirme hatası: {e}")
 
-        # Arka planda zamanlayıcıyı çalıştır
         bot.loop.create_task(cekilis_bitir_gorevi())
 
 

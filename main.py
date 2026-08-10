@@ -291,8 +291,7 @@ async def on_voice_state_update(member, before, after):
     
     try:
         if before.channel == after.channel:
-            # Susturma, Sağırlaştırma veya Sesten Atılma/Taşıma durumları
-            # 1. Sunucu Susturması (Server Mute) veya Sağırlaştırması (Server Deaf)
+            # Susturma, Sağırlaştırma işlemleri
             if before.mute != after.mute or before.deaf != after.deaf:
                 async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
                     if entry.target.id == member.id:
@@ -308,9 +307,7 @@ async def on_voice_state_update(member, before, after):
                     embed.title = "❄️🎧 Sunucu Kulaklık Durumu Değişti"
                     embed.description = f"**Yapan:** {yapan}\n**Yapılan:** {member.mention} kullanıcısı {durum}."
             
-            # 2. Sesten Atılma (Kanalın None olması ama Audit Log'da move/kick olması)
             elif before.channel is not None and after.channel is None:
-                # Normal çıkış mı yoksa sesten atılma mı kontrol et
                 async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_move):
                     if entry.target.id == member.id:
                         yapan = f"{entry.user.mention} (`{entry.user.id}`)"
@@ -328,7 +325,6 @@ async def on_voice_state_update(member, before, after):
                 embed.title = "❄️🔇 Ses Kanalından Çıkıldı"
                 embed.description = f"**Yapan / Yapılan:** {member.mention}\n**Kanal:** **{before.channel.name}**"
             elif before.channel is not None and after.channel is not None:
-                # Kanal değiştirme veya başka biri tarafından taşıma (move)
                 async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_move):
                     if entry.target.id == member.id:
                         yapan = f"{entry.user.mention} (`{entry.user.id}`)"
@@ -672,7 +668,7 @@ async def ban_komutu(interaction: discord.Interaction, member: discord.Member, s
         await member.ban(reason=sebep)
         await interaction.followup.send(f"❄️ {member.name} krallıktan kalıcı olarak banlandı.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=TaskException := e)
+        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 
 @bot.tree.command(name="kick", description="Kullanıcıyı atar.")
 @app_commands.default_permissions(kick_members=True)

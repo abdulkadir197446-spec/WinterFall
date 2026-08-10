@@ -6,7 +6,7 @@ from flask import Flask
 import threading
 import sqlite3
 import random
-from gttS import gTTS
+from gtts import gTTS
 import os.path
 from datetime import timedelta
 import logging
@@ -134,7 +134,9 @@ class TicketSelectMenu(discord.ui.Select):
         options_list = [
             discord.SelectOption(label="Destek", description="Genel teknik veya sunucu yardımı almak için.", emoji="🛠️"),
             discord.SelectOption(label="Partnerlik", description="Sunucu partnerlik başvurusu yapmak için.", emoji="💖"),
-            discord.SelectOption(label="Şikayet", description="Yetkili şikayeti veya öneri bildirmek için.", emoji="⚠️")
+            discord.SelectOption(label="Şikayet", description="Yetkili şikayeti veya öneri bildirmek için.", emoji="⚠️"),
+            discord.SelectOption(label="Kayıt", description="Sunucu kayıt işlemleri için.", emoji="📝"),
+            discord.SelectOption(label="Yetkili Alım", description="Ekibimize katılmak için başvuru.", emoji="🛡️")
         ]
         super().__init__(placeholder="Destek kategorisi seçin...", min_values=1, max_values=1, options=options_list, custom_id="persistent_ticket_select_menu")
 
@@ -268,14 +270,12 @@ async def on_voice_state_update(member, before_state, after_state):
         if not ses_log_kanali:
             return
 
-        # Ses Kanalında Susturulma Logu
         if not before_state.mute and after_state.mute:
             embed_ses = discord.Embed(title="🔇 Ses Kanalında Susturuldu", color=discord.Color.orange())
             embed_ses.add_field(name="Etkilenen Kullanıcı", value=member.mention, inline=False)
             embed_ses.set_footer(text=f"Kullanıcı ID: {member.id} | WinterFall Voice Log")
             await ses_log_kanali.send(embed=embed_ses)
 
-        # Kulaklık Kapatılma Logu
         if not before_state.deaf and after_state.deaf:
             embed_ses = discord.Embed(title="🎧 Kulaklığı Kapatıldı", color=discord.Color.orange())
             embed_ses.add_field(name="Etkilenen Kullanıcı", value=member.mention, inline=False)
@@ -300,7 +300,9 @@ async def ticket_kurulum_komutu(interaction: discord.Interaction):
                 "Aşağıdaki kategori menüsünü kullanarak hızlı bir şekilde destek talebi (ticket) oluşturabilirsiniz.\n\n"
                 "🛠️ **Destek:** Genel teknik ve sunucu içi yardımlar.\n"
                 "💖 **Partnerlik:** Sunucu ortaklık ve iş birliği başvuruları.\n"
-                "⚠️ **Şikayet:** Yetkili şikayetleri veya öneri bildirimleri."
+                "⚠️ **Şikayet:** Yetkili şikayetleri veya öneri bildirimleri.\n"
+                "📝 **Kayıt:** Sunucu kayıt işlemleri.\n"
+                "🛡️ **Yetkili Alım:** Ekibimize katılmak için başvuru."
             ),
             color=discord.Color.from_rgb(88, 101, 242)
         )

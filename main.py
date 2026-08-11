@@ -107,20 +107,21 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# SABİTLER VE KANALLAR (Kesin ve Net Eşleşme)
+# SABİTLER VE KANALLAR (Ateş ve Kırmızı Tema)
 # ==========================================
 MANUEL_ROLLER = ["♱ 𝐕𝐥𝐚𝐧𝐝𝐢𝐚", "Vlandia Yönetim", "🦁 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
 EKIP_ROL = "𝙑𝙡𝙖𝙣𝙙𝙞𝙖 𝙀𝙠𝙞𝙥"
 TICKET_KATEGORI_ADI = "🔥 VLANDİA DESTEK"
 
-GECERLI_RANK_ROLLERI = [
+# Sırasıyla alt rütbeden üst rütbeye doğru sıralanmış rank rolleri listesi
+RANK_HIYERARSISI = [
     "🦁Denetleyici",
-    "🦁Asistan +",
     "🦁Asistan",
-    "🦁Moderatör +",
+    "🦁Asistan +",
     "🦁Moderatör",
-    "🦁Baş Sorumlu",
-    "🦁Sorumlu"
+    "🦁Moderatör +",
+    "🦁Sorumlu",
+    "🦁Baş Sorumlu"
 ]
 
 KANALLAR = {
@@ -227,7 +228,7 @@ class TicketView(discord.ui.View):
         self.add_item(TicketSelect())
 
 # ==========================================
-# 4.1 ÇEKİLİŞ SİSTEMİ VIEW & LOGIC
+# 4.1 ÇEKİLİŞ SİSTEMİ VIEW & MODAL
 # ==========================================
 class GiveawayView(discord.ui.View):
     def __init__(self):
@@ -277,6 +278,60 @@ class GiveawayView(discord.ui.View):
             pass
 
         await interaction.followup.send(msg, ephemeral=True)
+
+class GiveawayModal(discord.ui.Modal, title="🔥 Vlandia Çekiliş Paneli"):
+    odul_input = discord.ui.TextInput(label="Ödül", placeholder="Örn: 1000 Robux / Nitro / VIP", required=True)
+    kazanan_input = discord.ui.TextInput(label="Kaç Kişi Kazanacak?", placeholder="Örn: 1", required=True)
+    sure_input = discord.ui.TextInput(label="Ne Zaman (Süre)?", placeholder="Örn: 1g, 2s, 30dk", required=True)
+    aciklama_input = discord.ui.TextInput(label="Açıklama", placeholder="Çekiliş kuralları veya detaylar...", style=discord.TextStyle.paragraph, required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        odul = self.odul_input.value
+        try:
+            kazanan_sayisi = int(self.kazanan_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ Kazanan kişi sayısı bir sayı olmalıdır!", ephemeral=True)
+            return
+
+        sure_str = self.sure_input.value.strip().lower()
+        aciklama = self.aciklama_input.value or "Ek açıklama belirtilmedi."
+
+        toplam_saniye = 0
+        try:
+            if sure_str.endswith('dk'):
+                toplam_saniye = int(sure_str[:-2]) * 60
+            elif sure_str.endswith('s'):
+                toplam_saniye = int(sure_str[:-1]) * 3600
+            elif sure_str.endswith('g'):
+                toplam_saniye = int(sure_str[:-1]) * 24 * 3600
+            else:
+                toplam_saniye = int(sure_str) * 60
+        except ValueError:
+            await interaction.response.send_message("❌ Geçersiz süre formatı! Örn: 1g, 2s, 30dk", ephemeral=True)
+            return
+
+        end_timestamp = discord.utils.utcnow().timestamp() + toplam_saniye
+        embed = discord.Embed(
+            title=f"🔥 ÇEKİLİŞ: {odul}",
+            description=f"**Açıklama:** {aciklama}\n\nAşağıdaki butona basarak alevler arasındaki çekilişe katılabilirsin!\n\n👑 **Kazanan Kişi Sayısı:** `{kazanan_sayisi}`\n⏳ **Bitiş:** <t:{int(end_timestamp)}:R> (<t:{int(end_timestamp)}:F>)\n👤 **Düzenleyen:** {interaction.user.mention}",
+            color=VLANDIA_TEMASI['renk'],
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_footer(text=VLANDIA_TEMASI['footer'])
+
+        kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["cekilis"]) or interaction.channel
+        view = GiveawayView()
+        msg = await kanal.send(embed=embed, view=view)
+
+        conn = get_database_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO giveaways (message_id, prize, winners_count, end_time, host_id, participants, ended) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                           (msg.id, odul, kazanan_sayisi, end_timestamp, interaction.user.id, ""))
+            conn.commit()
+            conn.close()
+
+        await interaction.response.send_message(f"🔥 Çekiliş paneli başarıyla {kanal.mention} kanalında açıldı!", ephemeral=True)
 
 # ==========================================
 # 5. BOT EVENTLERİ VE OTOMATİK SİSTEMLER
@@ -574,9 +629,9 @@ async def partnersayaç_komutu(interaction: discord.Interaction, member: discord
     embed.set_footer(text=VLANDIA_TEMASI['footer'])
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="rankup", description="Bir kullanıcıya manuel rankup verir ve rank-log kanalına kaydeder.")
-@app_commands.describe(member="Rankup verilecek kullanıcı", rol="Verilecek yeni rol")
-async def rankup_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
+@bot.tree.command(name="rankup", description="Bir kullanıcının mevcut rütbesini bir üst rütbeye yükseltir.")
+@app_commands.describe(member="Rütbesi yükseltilecek oyuncu")
+async def rankup_komutu(interaction: discord.Interaction, member: discord.Member):
     if interaction.channel.name != KANALLAR["rankLog"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
         return
@@ -586,31 +641,57 @@ async def rankup_komutu(interaction: discord.Interaction, member: discord.Member
         await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐕𝐥𝐚𝐧𝐝𝐢𝐚** rolüne sahip olmalısın!", ephemeral=True)
         return
 
-    if rol.name not in GECERLI_RANK_ROLLERI:
-        await interaction.response.send_message(f"❌ Yalnızca belirtilen yetki rank rolleri üzerinde işlem yapabilirsin! Seçtiğin rol geçersiz.", ephemeral=True)
-        return
-
     await interaction.response.defer(ephemeral=True)
-    try:
-        await member.add_roles(rol)
-        await interaction.followup.send(f"🔥 {member.mention} adlı kullanıcıya başarıyla **{rol.name}** verildi (Rankup).", ephemeral=True)
-        
-        rank_log_kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["rankLog"])
-        if rank_log_kanal:
-            log_embed = discord.Embed(
-                title="🔥📈 Manuel Rankup Gerçekleşti",
-                description=f"**Kullanıcı:** {member.mention} (`{member.id}`)\n**Verilen Rol:** **{rol.name}**\n**Yetkili:** {interaction.user.mention}",
-                color=VLANDIA_TEMASI['renk'],
-                timestamp=discord.utils.utcnow()
-            )
-            log_embed.set_footer(text=VLANDIA_TEMASI['footer'])
-            await rank_log_kanal.send(embed=log_embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Rol verilirken hata oluştu: {e}", ephemeral=True)
 
-@bot.tree.command(name="rankdown", description="Bir kullanıcının rankını düşürür ve rank-log kanalına kaydeder.")
-@app_commands.describe(member="Rankdown uygulanacak kullanıcı", rol="Alınacak rol")
-async def rankdown_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
+    # Kullanıcının üstünde olduğu rank rollerini bul
+    kullanici_ranklari = [r for r in member.roles if r.name in RANK_HIYERARSISI]
+    
+    if not kullanici_ranklari:
+        # Hiç rankı yoksa listedeki ilk rankı (en düşük) verelim
+        hedef_rol_adi = RANK_HIYERARSISI[0]
+        hedef_rol = discord.utils.get(interaction.guild.roles, name=hedef_rol_adi)
+        if not hedef_rol:
+            await interaction.followup.send(f"❌ Sunucuda **{hedef_rol_adi}** isimli rol bulunamadı!", ephemeral=True)
+            return
+        
+        await member.add_roles(hedef_rol)
+        await interaction.followup.send(f"🔥 {member.mention} hiç ranka sahip olmadığı için ilk rütbe olan **{hedef_rol.name}** verildi.", ephemeral=True)
+    else:
+        # Kullanıcının mevcut en yüksek rankını hiyerarşide bul
+        en_yuksek_mevcut = max(kullanici_ranklari, key=lambda r: RANK_HIYERARSISI.index(r.name))
+        mevcut_index = RANK_HIYERARSISI.index(en_yuksek_mevcut.name)
+
+        if mevcut_index + 1 >= len(RANK_HIYERARSISI):
+            await interaction.followup.send(f"❌ {member.mention} zaten en yüksek rütbede (**{en_yuksek_mevcut.name}**), daha fazla yükseltilemez!", ephemeral=True)
+            return
+
+        yeni_rol_adi = RANK_HIYERARSISI[mevcut_index + 1]
+        yeni_rol = discord.utils.get(interaction.guild.roles, name=yeni_rol_adi)
+        if not yeni_rol:
+            await interaction.followup.send(f"❌ Sunucuda **{yeni_rol_adi}** isimli rol bulunamadı!", ephemeral=True)
+            return
+
+        try:
+            await member.remove_roles(en_yuksek_mevcut)
+            await member.add_roles(yeni_rol)
+            await interaction.followup.send(f"🔥 {member.mention} başarıyla **{en_yuksek_mevcut.name}** rütbesinden **{yeni_rol.name}** rütbesine yükseltildi (Rankup).", ephemeral=True)
+            
+            rank_log_kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["rankLog"])
+            if rank_log_kanal:
+                log_embed = discord.Embed(
+                    title="🔥📈 Otomatik Hiyerarşik Rankup Gerçekleşti",
+                    description=f"**Kullanıcı:** {member.mention} (`{member.id}`)\n**Eski Rol:** {en_yuksek_mevcut.name}\n**Yeni Rol:** **{yeni_rol.name}**\n**Yetkili:** {interaction.user.mention}",
+                    color=VLANDIA_TEMASI['renk'],
+                    timestamp=discord.utils.utcnow()
+                )
+                log_embed.set_footer(text=VLANDIA_TEMASI['footer'])
+                await rank_log_kanal.send(embed=log_embed)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Rol güncellenirken hata oluştu: {e}", ephemeral=True)
+
+@bot.tree.command(name="rankdown", description="Bir kullanıcının mevcut rütbesini bir alt rütbeye düşürür.")
+@app_commands.describe(member="Rütbesi düşürülecek oyuncu")
+async def rankdown_komutu(interaction: discord.Interaction, member: discord.Member):
     if interaction.channel.name != KANALLAR["rankLog"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
         return
@@ -620,27 +701,44 @@ async def rankdown_komutu(interaction: discord.Interaction, member: discord.Memb
         await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐕𝐥𝐚𝐧𝐝𝐢𝐚** rolüne sahip olmalısın!", ephemeral=True)
         return
 
-    if rol.name not in GECERLI_RANK_ROLLERI:
-        await interaction.response.send_message(f"❌ Yalnızca belirtilen yetki rank rolleri üzerinde işlem yapabilirsin! Seçtiğin rol geçersiz.", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
+
+    kullanici_ranklari = [r for r in member.roles if r.name in RANK_HIYERARSISI]
+    
+    if not kullanici_ranklari:
+        await interaction.followup.send(f"❌ {member.mention} üzerinde düşürülebilecek herhangi bir rank rolü bulunmuyor!", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
+    en_yuksek_mevcut = max(kullanici_ranklari, key=lambda r: RANK_HIYERARSISI.index(r.name))
+    mevcut_index = RANK_HIYERARSISI.index(en_yuksek_mevcut.name)
+
+    if mevcut_index - 1 < 0:
+        await interaction.followup.send(f"❌ {member.mention} zaten en düşük rütbede (**{en_yuksek_mevcut.name}**), daha fazla düşürülemez!", ephemeral=True)
+        return
+
+    yeni_rol_adi = RANK_HIYERARSISI[mevcut_index - 1]
+    yeni_rol = discord.utils.get(interaction.guild.roles, name=yeni_rol_adi)
+    if not yeni_rol:
+        await interaction.followup.send(f"❌ Sunucuda **{yeni_rol_adi}** isimli rol bulunamadı!", ephemeral=True)
+        return
+
     try:
-        await member.remove_roles(rol)
-        await interaction.followup.send(f"🔥 {member.mention} adlı kullanıcıdan **{rol.name}** alındı (Rankdown).", ephemeral=True)
+        await member.remove_roles(en_yuksek_mevcut)
+        await member.add_roles(yeni_rol)
+        await interaction.followup.send(f"🔥 {member.mention} adlı kullanıcının rütbesi **{en_yuksek_mevcut.name}** seviyesinden **{yeni_rol.name}** seviyesine düşürüldü (Rankdown).", ephemeral=True)
         
         rank_log_kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["rankLog"])
         if rank_log_kanal:
             log_embed = discord.Embed(
-                title="🔥📉 Manuel Rankdown Gerçekleşti",
-                description=f"**Kullanıcı:** {member.mention} (`{member.id}`)\n**Alınan Rol:** **{rol.name}**\n**Yetkili:** {interaction.user.mention}",
+                title="🔥📉 Otomatik Hiyerarşik Rankdown Gerçekleşti",
+                description=f"**Kullanıcı:** {member.mention} (`{member.id}`)\n**Eski Rol:** {en_yuksek_mevcut.name}\n**Yeni Rol:** **{yeni_rol.name}**\n**Yetkili:** {interaction.user.mention}",
                 color=discord.Color.red(),
                 timestamp=discord.utils.utcnow()
             )
             log_embed.set_footer(text=VLANDIA_TEMASI['footer'])
             await rank_log_kanal.send(embed=log_embed)
     except Exception as e:
-        await interaction.followup.send(f"❌ Rol alınırken hata oluştu: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Rol güncellenirken hata oluştu: {e}", ephemeral=True)
 
 @bot.tree.command(name="ticket-kur", description="Vlandia tarzı destek panelini kurar.")
 @app_commands.default_permissions(administrator=True)
@@ -654,49 +752,10 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
     await interaction.response.send_message("🔥 Destek paneli başarıyla yerleştirildi!", ephemeral=True)
 
-@bot.tree.command(name="çekiliş", description="İmparatorluk alev temalı çekiliş paneli açar.")
-@app_commands.describe(kazanan_sayisi="Kaç kişi kazansın?", odul="Çekiliş ödülü nedir?", sure="Süre (Örn: 1g, 2s, 30dk)")
+@bot.tree.command(name="çekiliş", description="Ödül, kazanan sayısı, süre ve açıklama girebileceğiniz çekiliş panelini açar.")
 @app_commands.default_permissions(manage_guild=True)
-async def cekilis_komutu(interaction: discord.Interaction, kazanan_sayisi: int, odul: str, sure: str):
-    await interaction.response.defer(ephemeral=True)
-    
-    sure_str = sure.strip().lower()
-    toplam_saniye = 0
-    try:
-        if sure_str.endswith('dk'):
-            toplam_saniye = int(sure_str[:-2]) * 60
-        elif sure_str.endswith('s'):
-            toplam_saniye = int(sure_str[:-1]) * 3600
-        elif sure_str.endswith('g'):
-            toplam_saniye = int(sure_str[:-1]) * 24 * 3600
-        else:
-            toplam_saniye = int(sure_str) * 60
-    except ValueError:
-        await interaction.followup.send("❌ Geçersiz süre formatı!", ephemeral=True)
-        return
-
-    end_timestamp = discord.utils.utcnow().timestamp() + toplam_saniye
-    embed = discord.Embed(
-        title=f"🔥 ÇEKİLİŞ: {odul}",
-        description=f"Aşağıdaki butona basarak alevler arasındaki çekilişe katılabilirsin!\n\n👑 **Kazanan Kişi Sayısı:** `{kazanan_sayisi}`\n⏳ **Bitiş:** <t:{int(end_timestamp)}:R> (<t:{int(end_timestamp)}:F>)\n👤 **Düzenleyen:** {interaction.user.mention}",
-        color=VLANDIA_TEMASI['renk'],
-        timestamp=discord.utils.utcnow()
-    )
-    embed.set_footer(text=VLANDIA_TEMASI['footer'])
-
-    kanal = discord.utils.get(interaction.guild.text_channels, name=KANALLAR["cekilis"]) or interaction.channel
-    view = GiveawayView()
-    msg = await kanal.send(embed=embed, view=view)
-
-    conn = get_database_connection()
-    if conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO giveaways (message_id, prize, winners_count, end_time, host_id, participants, ended) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                       (msg.id, odul, kazanan_sayisi, end_timestamp, interaction.user.id, ""))
-        conn.commit()
-        conn.close()
-
-    await interaction.followup.send(f"🔥 Çekiliş başarıyla {kanal.mention} kanalında başlatıldı!", ephemeral=True)
+async def cekilis_komutu(interaction: discord.Interaction):
+    await interaction.response.send_modal(GiveawayModal())
 
 @bot.tree.command(name="zamanaşımı", description="Bir kullanıcıya belirttiğiniz süre kadar zamanaşımı (timeout) atar.")
 @app_commands.describe(member="Zamanaşımı uygulanacak savaşçı", sure="Süre (Örn: 1g, 2s, 30dk)", sebep="Zamanaşımı sebebi")

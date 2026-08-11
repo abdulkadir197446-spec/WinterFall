@@ -150,7 +150,7 @@ VLANDIA_TEMASI = {
 }
 
 # ==========================================
-# 4. TİCKET SİSTEMİ
+# 4. TİCKET SİSTEMİ (Kill Montage Çıkarıldı)
 # ==========================================
 class TicketKapatView(discord.ui.View):
     def __init__(self):
@@ -171,7 +171,6 @@ class TicketSelect(discord.ui.Select):
             discord.SelectOption(label="Destek", description="Genel yardıma mı ihtiyacın var? Tıkla.", emoji="🛠️"),
             discord.SelectOption(label="Partnerlik", description="Sunucu ortaklığı ve partnerlik işlemleri.", emoji="💖"),
             discord.SelectOption(label="Şikayet", description="Yetkili şikayeti veya öneri için.", emoji="⚠️"),
-            discord.SelectOption(label="Kill Montage", description="Kill montage videolarını buraya ilet.", emoji="📷"),
             discord.SelectOption(label="Ekip Alım", description="Vlandia kadrosuna dahil ol.", emoji="📥")
         ]
         super().__init__(placeholder="🔥 İşlem yapmak istediğin kategoriyi seç...", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu_vlandia")
@@ -643,11 +642,9 @@ async def rankup_komutu(interaction: discord.Interaction, member: discord.Member
 
     await interaction.response.defer(ephemeral=True)
 
-    # Kullanıcının üstünde olduğu rank rollerini bul
     kullanici_ranklari = [r for r in member.roles if r.name in RANK_HIYERARSISI]
     
     if not kullanici_ranklari:
-        # Hiç rankı yoksa listedeki ilk rankı (en düşük) verelim
         hedef_rol_adi = RANK_HIYERARSISI[0]
         hedef_rol = discord.utils.get(interaction.guild.roles, name=hedef_rol_adi)
         if not hedef_rol:
@@ -657,7 +654,6 @@ async def rankup_komutu(interaction: discord.Interaction, member: discord.Member
         await member.add_roles(hedef_rol)
         await interaction.followup.send(f"🔥 {member.mention} hiç ranka sahip olmadığı için ilk rütbe olan **{hedef_rol.name}** verildi.", ephemeral=True)
     else:
-        # Kullanıcının mevcut en yüksek rankını hiyerarşide bul
         en_yuksek_mevcut = max(kullanici_ranklari, key=lambda r: RANK_HIYERARSISI.index(r.name))
         mevcut_index = RANK_HIYERARSISI.index(en_yuksek_mevcut.name)
 

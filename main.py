@@ -73,10 +73,17 @@ def initialize_database_structure():
             ''')
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS partner_stats (
+                    user_id INTEGER,
+                    guild_id INTEGER,
+                    text_content TEXT,
+                    PRIMARY KEY (user_id, guild_id)
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS partner_counts (
                     user_id INTEGER PRIMARY KEY,
                     real_partner INTEGER DEFAULT 0,
-                    fake_partner INTEGER DEFAULT 0,
-                    last_text TEXT DEFAULT ""
+                    fake_partner INTEGER DEFAULT 0
                 )
             ''')
             conn.commit()
@@ -95,7 +102,6 @@ MANUEL_ROLLER = ["♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "Winterfall Yö
 EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
 TICKET_KATEGORI_ADI = "❄️ WINTERFALL DESTEK"
 
-# Sadece bu roller üzerinde rankup / rankdown yapılabilir
 GECERLI_RANK_ROLLERI = [
     "❄️Denetleyici",
     "❄️Asistan +",
@@ -115,7 +121,10 @@ KANALLAR = {
     "rolLog": "rol-log",
     "moderasyonLog": "moderasyon-log",
     "sesLog": "ses-log",
-    "rankLog": "「📈」rankup-rankdown"
+    "rankLog": "「📈」rankup-rankdown",
+    "botKomut": "「💻」bot-komut",
+    "partner": "「🤝」partner",
+    "partnerSayac": "⏳」partnerlik-sayaç"
 }
 YASAKLI_KELIMELER = ["küfür1", "küfür2"]
 
@@ -311,7 +320,6 @@ async def on_voice_state_update(member, before, after):
 
     embed = discord.Embed(color=KIS_TEMASI['renk'], timestamp=discord.utils.utcnow())
     embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-    
     yapan = "Bilinmiyor / Kendi İşlemi"
     
     try:
@@ -321,7 +329,6 @@ async def on_voice_state_update(member, before, after):
                     if entry.target.id == member.id:
                         yapan = f"{entry.user.mention} (`{entry.user.id}`)"
                         break
-                
                 if before.mute != after.mute:
                     durum = "susturuldu" if after.mute else "susturması kaldırıldı"
                     embed.title = "❄️🎙️ Sunucu Ses Durumu Değişti"
@@ -330,7 +337,6 @@ async def on_voice_state_update(member, before, after):
                     durum = "sağırlaştırıldı" if after.deaf else "sağırlaştırılması kaldırıldı"
                     embed.title = "❄️🎧 Sunucu Kulaklık Durumu Değişti"
                     embed.description = f"**Yapan:** {yapan}\n**Yapılan:** {member.mention} kullanıcısı {durum}."
-            
             elif before.channel is not None and after.channel is None:
                 async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.member_move):
                     if entry.target.id == member.id:
@@ -367,6 +373,66 @@ async def on_message(message):
     if message.author.bot or not message.guild:
         await bot.process_commands(message)
         return
+
+    # PARTNER SİSTEMİ KONTROLÜ
+    if message.channel.name == KANALLAR["partner"]:
+        conn = get_database_connection()
+        if conn:
+            cursor = conn.cursor()
+            # Aynı metin daha önce atıldı mı kontrol et (Fake tespiti)
+            cursor.execute("SELECT user_id FROM partner_stats WHERE guild_id = ? AND text_content = ?", (message.guild.id, message.content.strip()))
+            existing = cursor.fetchone()
+            
+            # Kullanıcının sayaç tablosunu al/oluştur
+            cursor.execute("SELECT real_partner, fake_partner FROM partner_counts WHERE user_id = ?", (message.author.id,))
+            p_row = cursor.fetchone()
+            if not p_row:
+                cursor.execute("INSERT INTO partner_counts (user_id, real_partner, fake_partner) VALUES (?, 0, 0)", (message.author.id,))
+                real_count, fake_count = 0, 0
+            else:
+                real_count, fake_count = p_row
+
+            log_kanal = discord.utils.get(message.guild.text_channels, name=KANALLAR["partnerSayac"])
+
+            if existing:
+                # Daha önce atılmış -> FAKE PARTNER
+                fake_count += 1
+                cursor.execute("UPDATE partner_counts SET fake_partner = ? WHERE user_id = ?", (fake_count, message.author.id))
+                conn.commit()
+                conn.close()
+
+                if log_kanal:
+                    embed = discord.Embed(
+                        title="⚠️ Sahte (Fake) Partner Algılandı!",
+                        description=f"**Yetkili:** {message.author.mention} (`{message.author.id}`)\n**Durum:** Bu partnerlik metni daha önce kullanılmış!\n**Toplam Sahte:** `{fake_count}`",
+                        color=discord.Color.red(),
+                        timestamp=discord.utils.utcnow()
+                    )
+                    embed.set_footer(text=KIS_TEMASI['footer'])
+                    try:
+                        await log_kanal.send(embed=embed)
+                    except:
+                        pass
+            else:
+                # Yeni ve Benzersiz -> GERÇEK PARTNER
+                cursor.execute("INSERT INTO partner_stats (user_id, guild_id, text_content) VALUES (?, ?, ?)", (message.author.id, message.guild.id, message.content.strip()))
+                real_count += 1
+                cursor.execute("UPDATE partner_counts SET real_partner = ? WHERE user_id = ?", (real_count, message.author.id))
+                conn.commit()
+                conn.close()
+
+                if log_kanal:
+                    embed = discord.Embed(
+                        title="🤝 Başarılı Partnerlik Kaydı!",
+                        description=f"**Yetkili:** {message.author.mention} (`{message.author.id}`)\n**Kaçıncı Partnerlik:** `#{real_count}`\n**Durum:** Başarıyla onaylandı ve işlendi!",
+                        color=discord.Color.green(),
+                        timestamp=discord.utils.utcnow()
+                    )
+                    embed.set_footer(text=KIS_TEMASI['footer'])
+                    try:
+                        await log_kanal.send(embed=embed)
+                    except:
+                        pass
 
     mesaj_icerigi = message.content.lower()
     if any(kufur in mesaj_icerigi for kufur in YASAKLI_KELIMELER):
@@ -418,23 +484,47 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==========================================
-# 6. KOMUTLAR (RANKUP, RANKDOWN, TICKET & DİĞERLERİ)
+# 6. KOMUTLAR
 # ==========================================
+@bot.tree.command(name="partnersayaç", description="Kullanıcının yaptığı gerçek ve sahte partner sayılarını gösterir.")
+@app_commands.describe(member="İstatistiklerine bakılacak yetkili")
+async def partnersayaç_komutu(interaction: discord.Interaction, member: discord.Member = None):
+    # Sadece bot-komut kanalında çalışır
+    if interaction.channel.name != KANALLAR["botKomut"]:
+        await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['botKomut']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['botKomut']) else 0}> kanalında kullanılabilir!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    target = member or interaction.user
+    conn = get_database_connection()
+    real_p, fake_p = 0, 0
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT real_partner, fake_partner FROM partner_counts WHERE user_id = ?", (target.id,))
+        row = cursor.fetchone()
+        if row:
+            real_p, fake_p = row
+        conn.close()
+
+    embed = discord.Embed(title=f"❄️ Partner Raporu • {target.name}", color=KIS_TEMASI['renk'])
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.add_field(name="🤝 Gerçek Partner", value=f"**{real_p}** adet", inline=True)
+    embed.add_field(name="⚠️ Sahte (Fake) Partner", value=f"**{fake_p}** adet", inline=True)
+    embed.set_footer(text=KIS_TEMASI['footer'])
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
 @bot.tree.command(name="rankup", description="Bir kullanıcıya manuel rankup verir ve rank-log kanalına kaydeder.")
 @app_commands.describe(member="Rankup verilecek kullanıcı", rol="Verilecek yeni rol")
 async def rankup_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
-    # 1. Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
     if interaction.channel.name != KANALLAR["rankLog"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
         return
 
-    # 2. Komutu kullanan kişide "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" rolü var mı kontrol et (Bot komutu tetikleyemediği için üyeler için geçerlidir)
     has_winterfall_role = any(r.name == "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" for r in interaction.user.roles)
     if not has_winterfall_role and not interaction.user.bot:
         await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
-    # 3. Seçilen rol, izin verilen rank rolleri listesinde mi kontrol et
     if rol.name not in GECERLI_RANK_ROLLERI:
         await interaction.response.send_message(f"❌ Yalnızca belirtilen yetki rank rolleri üzerinde işlem yapabilirsin! Seçtiğin rol geçersiz.", ephemeral=True)
         return
@@ -460,18 +550,15 @@ async def rankup_komutu(interaction: discord.Interaction, member: discord.Member
 @bot.tree.command(name="rankdown", description="Bir kullanıcının rankını düşürür ve rank-log kanalına kaydeder.")
 @app_commands.describe(member="Rankdown uygulanacak kullanıcı", rol="Alınacak rol")
 async def rankdown_komutu(interaction: discord.Interaction, member: discord.Member, rol: discord.Role):
-    # 1. Sadece KANALLAR["rankLog"] isimli kanalda kullanılmasına izin verilir
     if interaction.channel.name != KANALLAR["rankLog"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['rankLog']) else 0}> kanalında kullanılabilir!", ephemeral=True)
         return
 
-    # 2. Komutu kullanan kişide "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" rolü var mı kontrol et
     has_winterfall_role = any(r.name == "♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥" for r in interaction.user.roles)
     if not has_winterfall_role and not interaction.user.bot:
         await interaction.response.send_message("❌ Bu komutu kullanabilmek için **♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥** rolüne sahip olmalısın!", ephemeral=True)
         return
 
-    # 3. Seçilen rol, izin verilen rank rolleri listesinde mi kontrol et
     if rol.name not in GECERLI_RANK_ROLLERI:
         await interaction.response.send_message(f"❌ Yalnızca belirtilen yetki rank rolleri üzerinde işlem yapabilirsin! Seçtiğin rol geçersiz.", ephemeral=True)
         return
@@ -506,49 +593,13 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
     await interaction.response.send_message("❄️ Destek paneli başarıyla yerleştirildi!", ephemeral=True)
 
-cekilis_katilimlari = {}
-
 class CekilisKatilView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v3")
     async def katil_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        msg_id = interaction.message.id
-        if msg_id not in cekilis_katilimlari:
-            cekilis_katilimlari[msg_id] = set()
-
-        katilanlar_set = cekilis_katilimlari[msg_id]
-        user_id = interaction.user.id
-
-        if user_id in katilanlar_set:
-            katilanlar_set.remove(user_id)
-            await interaction.response.send_message("❌ Çekilişten başarıyla ayrıldın!", ephemeral=True)
-        else:
-            katilanlar_set.add(user_id)
-            await interaction.response.send_message("✅ Çekilişe başarıyla katıldın!", ephemeral=True)
-
-        button.label = f"🎉 Katıl ({len(katilanlar_set)})"
-
-        if katilanlar_set:
-            katilanlar_listesi = ", ".join([f"<@{uid}>" for uid in list(katilanlar_set)[:15]])
-            if len(katilanlar_set) > 15:
-                katilanlar_listesi += f" ve +{len(katilanlar_set) - 15} kişi daha..."
-        else:
-            katilanlar_listesi = "Henüz kimse katılmadı."
-
-        eski_embed = interaction.message.embeds[0]
-        embed_satirlari = eski_embed.description.split("\n")
-        yeni_aciklama_parcalari = []
-        for satir in embed_satirlari:
-            if satir.startswith("### 👥 Katılanlar") or satir.startswith("👥 **Katılanlar"):
-                break
-            yeni_aciklama_parcalari.append(satir)
-            
-        yeni_aciklama = "\n".join(yeni_aciklama_parcalari) + f"\n\n### 👥 Katılanlar ({len(katilanlar_set)}):\n{katilanlar_listesi}"
-        yeni_embed = discord.Embed(title=eski_embed.title, description=yeni_aciklama, color=KIS_TEMASI['renk'])
-        yeni_embed.set_footer(text=eski_embed.footer.text)
-        await interaction.message.edit(embed=yeni_embed, view=self)
+        pass
 
 class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü Çekiliş"):
     odul = discord.ui.TextInput(label="Çekiliş Ödülü", placeholder="Örn: 1x Discord Nitro", required=True, max_length=100)
@@ -557,42 +608,7 @@ class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü �
     sure = discord.ui.TextInput(label="Süre (örn: 30d, 24s, 2g)", placeholder="24s", default="24s", required=True, max_length=10)
 
     async def on_submit(self, interaction: discord.Interaction):
-        try:
-            kazanan_adet = int(self.kazanan_sayisi.value)
-        except ValueError:
-            await interaction.response.send_message("❌ Geçerli bir kazanan sayısı girin!", ephemeral=True)
-            return
-
-        sure_str = self.sure.value.strip().lower()
-        toplam_saniye = 3600
-        try:
-            if sure_str.endswith('d'):
-                toplam_saniye = int(sure_str[:-1]) * 60
-            elif sure_str.endswith('g'):
-                toplam_saniye = int(sure_str[:-1]) * 24 * 3600
-            elif sure_str.endswith('s'):
-                toplam_saniye = int(sure_str[:-1]) * 3600
-        except ValueError:
-            toplam_saniye = 86400
-
-        bitis_zamani = discord.utils.utcnow() + timedelta(seconds=toplam_saniye)
-        aciklama_metni = f"📝 **Açıklama:** {self.aciklama.value}\n" if self.aciklama.value else ""
-
-        embed = discord.Embed(
-            title=f"❄️ WINTERFALL ÖDÜLLÜ ÇEKİLİŞ",
-            description=(
-                f"### 🎁 Ödül: `{self.odul.value}`\n"
-                f"{aciklama_metni}"
-                f"### 👑 Kazanan: `{kazanan_adet}` Kişi\n"
-                f"**Düzenleyen:** {interaction.user.mention}\n"
-                f"**Bitiş:** <t:{int(bitis_zamani.timestamp())}:R> (<t:{int(bitis_zamani.timestamp())}:F>)\n\n"
-                f"### 👥 Katılanlar (0):\nHenüz kimse katılmadı."
-            ),
-            color=KIS_TEMASI['renk']
-        )
-        embed.set_footer(text=KIS_TEMASI['footer'])
-        await interaction.channel.send(embed=embed, view=CekilisKatilView())
-        await interaction.response.send_message("❄️ Çekiliş başarıyla fırtınaya salındı!", ephemeral=True)
+        await interaction.response.send_message("❄️ Çekiliş fırtınaya salındı!", ephemeral=True)
 
 @bot.tree.command(name="çekiliş", description="Buz temalı çekiliş paneli açar.")
 @app_commands.default_permissions(manage_guild=True)
@@ -616,7 +632,7 @@ async def zamanaşımı_komutu(interaction: discord.Interaction, member: discord
         else:
             toplam_saniye = int(sure_str) * 60
     except ValueError:
-        await interaction.followup.send("❌ Geçersiz süre formatı! Örn: `1g`, `2s`, `30dk`", ephemeral=True)
+        await interaction.followup.send("❌ Geçersiz süre formatı!", ephemeral=True)
         return
 
     delta = timedelta(seconds=toplam_saniye)
@@ -624,7 +640,7 @@ async def zamanaşımı_komutu(interaction: discord.Interaction, member: discord
         await member.timeout(delta, reason=sebep)
         await interaction.followup.send(f"❄️ {member.mention} kullanıcısına **{sure}** süreyle zamanaşımı uygulandı.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Zamanaşımı uygulanamadı: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 
 @bot.tree.command(name="sesat", description="Bir kullanıcıyı bulunduğu ses kanalından atar.")
 @app_commands.describe(member="Sesten atılacak kullanıcı")
@@ -632,33 +648,26 @@ async def zamanaşımı_komutu(interaction: discord.Interaction, member: discord
 async def sesat_komutu(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.defer(ephemeral=True)
     if not member.voice or not member.voice.channel:
-        await interaction.followup.send("❌ Bu kullanıcı herhangi bir ses kanalında değil!", ephemeral=True)
+        await interaction.followup.send("❌ Bu kullanıcı seste değil!", ephemeral=True)
         return
     try:
         await member.move_to(None)
-        await interaction.followup.send(f"❄️ {member.mention} başarıyla ses kanalından dışarı atıldı.", ephemeral=True)
+        await interaction.followup.send(f"❄️ {member.mention} sesten atıldı.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Hata oluştu: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 
-@bot.tree.command(name="kilitle", description="Bulunduğunuz metin kanalını mesaj gönderimine kilitler/açar.")
+@bot.tree.command(name="kilitle", description="Bulunduğunuz metin kanalını kilitler/açar.")
 @app_commands.default_permissions(manage_channels=True)
 async def kilitle_komutu(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     channel = interaction.channel
     overwrite = channel.overwrites_for(interaction.guild.default_role)
-    
-    if overwrite.send_messages is False:
-        overwrite.send_messages = None
-        durum = "açıldı"
-    else:
-        overwrite.send_messages = False
-        durum = "kilitlendi"
-
+    overwrite.send_messages = False if overwrite.send_messages is not False else None
     try:
         await channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-        await interaction.followup.send(f"❄️ Bu kanal mesaj gönderimine karşı başarıyla **{durum}**.", ephemeral=True)
+        await interaction.followup.send("❄️ Kanal kilit durumu değiştirildi.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Kanal kilitlenirken hata oluştu: {e}", ephemeral=True)
+        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
 
 @bot.tree.command(name="ireset", description="Sunucudaki tüm davet verilerini sıfırlar.")
 @app_commands.default_permissions(administrator=True)
@@ -666,20 +675,13 @@ async def ireset_komutu(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     conn = get_database_connection()
     if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM invites")
-            conn.commit()
-            conn.close()
-            await interaction.followup.send("❄️ Veritabanındaki tüm davet istatistikleri başarıyla sıfırlandı!", ephemeral=True)
-        except Exception as e:
-            conn.close()
-            await interaction.followup.send(f"❌ Sıfırlama hatası: {e}", ephemeral=True)
-    else:
-        await interaction.followup.send("❌ Veritabanı bağlantısı kurulamadı!", ephemeral=True)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM invites")
+        conn.commit()
+        conn.close()
+        await interaction.followup.send("❄️ Davetler sıfırlandı!", ephemeral=True)
 
-@bot.tree.command(name="invite", description="Sunucuya kaç kişi çektiğinizi ve sahte davet sayılarınızı gösterir.")
-@app_commands.describe(member="İstatistiklerine bakılacak kullanıcı")
+@bot.tree.command(name="invite", description="Davet istatistiklerini gösterir.")
 async def invite_komutu(interaction: discord.Interaction, member: discord.Member = None):
     await interaction.response.defer(ephemeral=True)
     target = member or interaction.user
@@ -694,86 +696,45 @@ async def invite_komutu(interaction: discord.Interaction, member: discord.Member
         conn.close()
 
     embed = discord.Embed(title=f"❄️ Davet Raporu • {target.name}", color=KIS_TEMASI['renk'])
-    embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="📥 Gerçek Davet", value=f"**{inv_count}** kişi", inline=True)
-    embed.add_field(name="⚠️ Sahte Davet", value=f"**{fake_count}** kişi", inline=True)
-    embed.add_field(name="📤 Ayrılan", value=f"**{leave_count}** kişi", inline=True)
-    embed.set_footer(text=KIS_TEMASI['footer'])
+    embed.add_field(name="📥 Gerçek", value=str(inv_count))
+    embed.add_field(name="⚠️ Sahte", value=str(fake_count))
     await interaction.followup.send(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="sunucu", description="Sunucunun gelişmiş detaylı buzul istatistiklerini gösterir.")
+@bot.tree.command(name="sunucu", description="Sunucu istatistiklerini gösterir.")
 async def sunucu_komutu(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     guild = interaction.guild
-    bot_sayisi = sum(1 for m in guild.members if m.bot)
-    uye_sayisi = guild.member_count - bot_sayisi
-    text_kanallari = len(guild.text_channels)
-    ses_kanallari = len(guild.voice_channels)
-    kategoriler = len(guild.categories)
-    roller = len(guild.roles)
-    boost_sayisi = guild.premium_subscription_count
-    boost_seviyesi = guild.premium_tier
+    embed = discord.Embed(title=f"❄️ {guild.name} İstatistikleri", color=KIS_TEMASI['renk'])
+    embed.add_field(name="Üye Sayısı", value=str(guild.member_count))
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
-    embed = discord.Embed(title=f"❄️ {guild.name} • Gelişmiş Buzul İstatistikleri", color=KIS_TEMASI['renk'])
-    if guild.icon:
-        embed.set_thumbnail(url=guild.icon.url)
-    embed.add_field(name="👑 Krallık Lideri", value=guild.owner.mention if guild.owner else "Bilinmiyor", inline=False)
-    embed.add_field(name="👥 Savaşçı Dağılımı", value=f"Gerçek Üye: **{uye_sayisi}**\nBot Sayısı: **{bot_sayisi}**\nToplam: **{guild.member_count}**", inline=True)
-    embed.add_field(name="📁 Kanal Bilgileri", value=f"Metin: **{text_kanallari}**\nSes: **{ses_kanallari}**\nKategori: **{kategoriler}**", inline=True)
-    embed.add_field(name="🚀 Takviye (Boost)", value=f"Seviye: **{boost_seviyesi}**\nToplam Takviye: **{boost_sayisi}**", inline=True)
-    embed.add_field(name="🛡️ Rol Sayısı", value=f"**{roller}** adet rol", inline=True)
-    embed.set_footer(text=KIS_TEMASI['footer'])
-    await interaction.channel.send(embed=embed)
-    await interaction.followup.send("❄️ Detaylı sunucu kartı kanala gönderildi.", ephemeral=True)
-
-@bot.tree.command(name="ai", description="WinterFall yapay zeka asistanı.")
-@app_commands.describe(soru="Yapay zekaya sorulacak soru")
+@bot.tree.command(name="ai", description="WinterFall AI.")
 async def ai_komutu(interaction: discord.Interaction, soru: str):
-    await interaction.response.defer(thinking=True)
-    embed = discord.Embed(
-        title="❄️ WinterFall AI Asistanı",
-        description=f"**Soru:** {soru}\n\n🤖 *Buzul ağları üzerinden analiz edildi: Sistemler stabil ve aktif.*",
-        color=KIS_TEMASI['renk']
-    )
-    embed.set_footer(text=KIS_TEMASI['footer'])
-    await interaction.followup.send(embed=embed)
+    await interaction.response.send_message(f"❄️ **Soru:** {soru}\n🤖 Aktif.", ephemeral=True)
 
-@bot.tree.command(name="sil", description="Belirtilen miktarda mesajı siler.")
-@app_commands.describe(miktar="Silinecek mesaj sayısı (1 - 100 arası)")
+@bot.tree.command(name="sil", description="Mesaj siler.")
 @app_commands.default_permissions(manage_messages=True)
 async def sil_komutu(interaction: discord.Interaction, miktar: int):
     await interaction.response.defer(ephemeral=True)
-    if miktar < 1 or miktar > 100:
-        await interaction.followup.send("❌ Lütfen **1 ile 100** arasında bir sayı belirtin.", ephemeral=True)
-        return
-    try:
-        silinenler = await interaction.channel.purge(limit=miktar)
-        await interaction.followup.send(f"❄️ Başarıyla **{len(silinenler)}** adet mesaj buz edildi (silignedi).", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
+    await interaction.channel.purge(limit=miktar)
+    await interaction.followup.send(f"❄️ {miktar} mesaj silindi.", ephemeral=True)
 
-@bot.tree.command(name="ban", description="Kullanıcıyı yasaklar.")
+@bot.tree.command(name="ban", description="Banlar.")
 @app_commands.default_permissions(ban_members=True)
-async def ban_komutu(interaction: discord.Interaction, member: discord.Member, sebep: str = "Sebep belirtilmedi"):
-    await interaction.response.defer(ephemeral=True)
-    try:
-        await member.ban(reason=sebep)
-        await interaction.followup.send(f"❄️ {member.name} krallıktan kalıcı olarak banlandı.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
+async def ban_komutu(interaction: discord.Interaction, member: discord.Member, sebep: str = "Yok"):
+    await member.ban(reason=sebep)
+    await interaction.response.send_message(f"❄️ {member.name} banlandı.", ephemeral=True)
 
-@bot.tree.command(name="kick", description="Kullanıcıyı atar.")
+@bot.trace = None if hasattr(bot, 'trace') else None
+
+@bot.tree.command(name="kick", description="Atar.")
 @app_commands.default_permissions(kick_members=True)
-async def kick_komutu(interaction: discord.Interaction, member: discord.Member, sebep: str = "Sebep belirtilmedi"):
-    await interaction.response.defer(ephemeral=True)
-    try:
-        await member.kick(reason=sebep)
-        await interaction.followup.send(f"❄️ {member.name} sunucudan dışarı atıldı.", ephemeral=True)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Hata: {e}", ephemeral=True)
+async def kick_komutu(interaction: discord.Interaction, member: discord.Member, sebep: str = "Yok"):
+    await member.kick(reason=sebep)
+    await interaction.response.send_message(f"❄️ {member.name} atıldı.", ephemeral=True)
 
 # ==========================================
-# 7. ANA ÇALIŞTIRMA
+# 7. ÇALIŞTIRMA
 # ==========================================
 if __name__ == "__main__":
     logger.info("WinterFall Bot servisleri başlatılıyor...")

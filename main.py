@@ -96,7 +96,7 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# SABİTLER VE KANALLAR
+# SABİTLER VE KANALLAR (Discord İsimleriyle Birebir Uyumlu)
 # ==========================================
 MANUEL_ROLLER = ["♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "Winterfall Yönetim", "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
 EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
@@ -123,8 +123,8 @@ KANALLAR = {
     "sesLog": "ses-log",
     "rankLog": "「📈」rankup-rankdown",
     "botKomut": "「💻」bot-komut",
-    "partner": "「🤝」partner",
-    "partnerSayac": "⏳」partnerlik-sayaç"
+    "partner": "「🤝」 partner",
+    "partnerSayac": "「⏳」partnerlik-sayaç"
 }
 YASAKLI_KELIMELER = ["küfür1", "küfür2"]
 
@@ -379,11 +379,9 @@ async def on_message(message):
         conn = get_database_connection()
         if conn:
             cursor = conn.cursor()
-            # Aynı metin daha önce atıldı mı kontrol et (Fake tespiti)
             cursor.execute("SELECT user_id FROM partner_stats WHERE guild_id = ? AND text_content = ?", (message.guild.id, message.content.strip()))
             existing = cursor.fetchone()
             
-            # Kullanıcının sayaç tablosunu al/oluştur
             cursor.execute("SELECT real_partner, fake_partner FROM partner_counts WHERE user_id = ?", (message.author.id,))
             p_row = cursor.fetchone()
             if not p_row:
@@ -395,7 +393,6 @@ async def on_message(message):
             log_kanal = discord.utils.get(message.guild.text_channels, name=KANALLAR["partnerSayac"])
 
             if existing:
-                # Daha önce atılmış -> FAKE PARTNER
                 fake_count += 1
                 cursor.execute("UPDATE partner_counts SET fake_partner = ? WHERE user_id = ?", (fake_count, message.author.id))
                 conn.commit()
@@ -414,7 +411,6 @@ async def on_message(message):
                     except:
                         pass
             else:
-                # Yeni ve Benzersiz -> GERÇEK PARTNER
                 cursor.execute("INSERT INTO partner_stats (user_id, guild_id, text_content) VALUES (?, ?, ?)", (message.author.id, message.guild.id, message.content.strip()))
                 real_count += 1
                 cursor.execute("UPDATE partner_counts SET real_partner = ? WHERE user_id = ?", (real_count, message.author.id))
@@ -489,7 +485,6 @@ async def on_message(message):
 @bot.tree.command(name="partnersayaç", description="Kullanıcının yaptığı gerçek ve sahte partner sayılarını gösterir.")
 @app_commands.describe(member="İstatistiklerine bakılacak yetkili")
 async def partnersayaç_komutu(interaction: discord.Interaction, member: discord.Member = None):
-    # Sadece bot-komut kanalında çalışır
     if interaction.channel.name != KANALLAR["botKomut"]:
         await interaction.response.send_message(f"❌ Bu komut yalnızca <#{discord.utils.get(interaction.guild.text_channels, name=KANALLAR['botKomut']).id if discord.utils.get(interaction.guild.text_channels, name=KANALLAR['botKomut']) else 0}> kanalında kullanılabilir!", ephemeral=True)
         return
@@ -724,8 +719,6 @@ async def sil_komutu(interaction: discord.Interaction, miktar: int):
 async def ban_komutu(interaction: discord.Interaction, member: discord.Member, sebep: str = "Yok"):
     await member.ban(reason=sebep)
     await interaction.response.send_message(f"❄️ {member.name} banlandı.", ephemeral=True)
-
-@bot.trace = None if hasattr(bot, 'trace') else None
 
 @bot.tree.command(name="kick", description="Atar.")
 @app_commands.default_permissions(kick_members=True)

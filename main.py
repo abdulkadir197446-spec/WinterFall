@@ -76,7 +76,7 @@ def initialize_database_structure():
                     user_id INTEGER,
                     guild_id INTEGER,
                     text_content TEXT,
-                    PRIMARY KEY (user_id, guild_id)
+                    PRIMARY KEY (user_id, guild_id, text_content)
                 )
             ''')
             cursor.execute('''
@@ -96,7 +96,7 @@ def initialize_database_structure():
 initialize_database_structure()
 
 # ==========================================
-# SABİTLER VE KANALLAR (Discord İsimleriyle Birebir Uyumlu)
+# SABİTLER VE KANALLAR (Kesin ve Net Eşleşme)
 # ==========================================
 MANUEL_ROLLER = ["♱ 𝐖𝐢𝐧𝐭𝐞𝐫𝐟𝐚𝐥𝐥", "Winterfall Yönetim", "❄ 𝙁𝙤𝙪𝙣𝙙𝙚𝙧"]
 EKIP_ROL = "𝙒𝙞𝙣𝙩𝙚𝙧𝙛𝙖𝙡𝙡 𝙀𝙠𝙞𝙥"
@@ -123,7 +123,7 @@ KANALLAR = {
     "sesLog": "ses-log",
     "rankLog": "「📈」rankup-rankdown",
     "botKomut": "「💻」bot-komut",
-    "partner": "「🤝」 partner",
+    "partner": "「🤝」partner",
     "partnerSayac": "「⏳」partnerlik-sayaç"
 }
 YASAKLI_KELIMELER = ["küfür1", "küfür2"]
@@ -476,7 +476,6 @@ async def on_message(message):
                 pass
             return
 
-    bot.dispatch("custom_message", message)
     await bot.process_commands(message)
 
 # ==========================================
@@ -588,27 +587,10 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
     await interaction.response.send_message("❄️ Destek paneli başarıyla yerleştirildi!", ephemeral=True)
 
-class CekilisKatilView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="🎉 Katıl (0)", style=discord.ButtonStyle.primary, custom_id="winterfall_cekilis_frost_v3")
-    async def katil_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
-
-class CekilisOlusturModal(discord.ui.Modal, title="❄️ WinterFall Ödüllü Çekiliş"):
-    odul = discord.ui.TextInput(label="Çekiliş Ödülü", placeholder="Örn: 1x Discord Nitro", required=True, max_length=100)
-    aciklama = discord.ui.TextInput(label="Açıklama / Kurallar", placeholder="Örn: Sunucumuzda aktif kalmak zorunludur.", style=discord.TextStyle.paragraph, required=False, max_length=300)
-    kazanan_sayisi = discord.ui.TextInput(label="Kazanan Sayısı", placeholder="1", default="1", required=True, max_length=2)
-    sure = discord.ui.TextInput(label="Süre (örn: 30d, 24s, 2g)", placeholder="24s", default="24s", required=True, max_length=10)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message("❄️ Çekiliş fırtınaya salındı!", ephemeral=True)
-
 @bot.tree.command(name="çekiliş", description="Buz temalı çekiliş paneli açar.")
 @app_commands.default_permissions(manage_guild=True)
 async def cekilis_komutu(interaction: discord.Interaction):
-    await interaction.response.send_modal(CekilisOlusturModal())
+    await interaction.response.send_message("❄️ Çekiliş komutu aktif.", ephemeral=True)
 
 @bot.tree.command(name="zamanaşımı", description="Bir kullanıcıya belirttiğiniz süre kadar zamanaşımı (timeout) atar.")
 @app_commands.describe(member="Zamanaşımı uygulanacak savaşçı", sure="Süre (Örn: 1g, 2s, 30dk)", sebep="Zamanaşımı sebebi")

@@ -2,6 +2,9 @@ import os
 import threading
 import asyncio
 import io
+import re
+import random
+from datetime import datetime, timedelta
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -45,45 +48,238 @@ async def send_log(guild: discord.Guild, embed: discord.Embed):
 
 
 # --- VLANDİA TEMALI GİRİŞ/ÇIKIŞ KART OLUŞTURUCU ---
-async def send_welcome_card(member: discord.member, action_type: str):
+async def send_welcome_card(member: discord.Member, action_type: str):
   channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
   if not channel:
     return
 
   try:
-    # Arka plan için Vlandia tarzı koyu/teknolojik bir tuval oluşturuyoruz (900x500 boyutunda)
     background = Canvas(900, 500, color=(20, 22, 25))
     editor = Editor(background)
-
-    # Çerçeve ve Vlandia tarzı detaylar (örneğin köşelere teknolojik çizgiler/çerçeve)
     editor.rectangle((20, 20, 860, 460), outline=(255, 140, 0), stroke_width=3)
 
-    # Kullanıcının Avatarını Çekme ve Daire Yapma
-    user_avatar_image = await member.avatar.read() if member.avatar else await member.default_avatar.read()
+    user_avatar_image = (
+        await member.avatar.read()
+        if member.avatar
+        else await member.default_avatar.read()
+    )
     avatar_image = Editor(user_avatar_image).resize((160, 160)).circle_image()
-
-    # Avatarı kartın tam ortasına yerleştirme
     editor.paste(avatar_image, (370, 110))
 
-    # Yazı Tipleri (Varsayılan sistem fontu veya yüklenen fontlar)
     title_font = Font.load_default(size=40)
     name_font = Font.load_default(size=35)
 
-    # Üst metin (Hoşgeldin / Güle Güle)
-    title_text = f"SENİNLE BERABER {member.guild.member_count} KİŞİ OLDUK!" if action_type == "join" else f"GÖRÜŞÜRÜZ {member.name.upper()}"
-    editor.text((450, 50), title_text, color=(255, 255, 255), font=title_font, align="center")
+    title_text = (
+        f"SENİNLE BERABER {member.guild.member_count} KİŞİ OLDUK!"
+        if action_type == "join"
+        else f"GÖRÜŞÜRÜZ {member.name.upper()}"
+    )
+    editor.text(
+        (450, 50),
+        title_text,
+        color=(255, 255, 255),
+        font=title_font,
+        align="center",
+    )
+    editor.text(
+        (450, 340),
+        member.name.upper(),
+        color=(255, 140, 0),
+        font=name_font,
+        align="center",
+    )
 
-    # Kullanıcı adı alt kısma
-    editor.text((450, 340), member.name.upper(), color=(255, 140, 0), font=name_font, align="center")
-
-    # Dosyaya dönüştürüp kanala gönderme
     file = discord.File(fp=editor.image_bytes, filename="vlandia_card.png")
-    
-    message_content = f"{member.mention} Hoşgeldin! Senle beraber **{member.guild.member_count}** kişi olduk." if action_type == "join" else f"**{member.name}** aramızdan ayrıldı."
+    message_content = (
+        f"{member.mention} Hoşgeldin! Senle beraber **{member.guild.member_count}**"
+        f" kişi olduk."
+        if action_type == "join"
+        else f"**{member.name}** aramızdan ayrıldı."
+    )
     await channel.send(content=message_content, file=file)
 
   except Exception as e:
     print(f"Giriş/Çıkış kartı oluşturulurken hata: {e}")
+
+
+# --- ÇEKİLİŞ SİSTEMİ (SÜRE ÇÖZÜCÜ VE BUTON) ---
+def parse_time(time_str: str) -> int:
+  time_str = time_str.strip().lower()
+  match = re.match(r"^(\d+)([smhd])$", time_str)
+  if not match:
+    return 0
+  amount, unit = int(match.group(1)), match.group(2)
+  if unit == "s":
+    return amount
+  elif unit == "m":
+    return amount * 60
+  elif unit == "h":
+    return amount * 3600
+  elif unit == "d":
+    return amount * 86400
+  return 0
+
+
+class GiveawayView(discord.ui.View):
+
+  def __init__(self, duration_seconds: int, winners_count: int, prize: str, description: str, host: discord.Member):
+    super().__init__(timeout=None)
+    self.participants = set()
+    self.duration_seconds = duration_seconds
+    self.winners_count = winners_count
+    self.prize = prize
+    self.description = description
+    self.host = host
+    self.ended = False
+
+  @discord.ui.button(
+      label="🎉 Katıl",
+      style=discord.ButtonStyle.primary,
+      custom_id="giveaway_join_btn",
+  )
+  async def join_button(
+      self, interaction: discord.Interaction, button: discord.ui.Button
+  ):
+    if self.ended:
+      await interaction.response.send_message(
+          "❌ Bu çekiliş sona ermiştir!", ephemeral=True
+      )
+      return
+
+    if interaction.user.id in self.participants:
+      self.participants.remove(interaction.user.id)
+      await interaction.response.send_message(
+          "❌ Çekilişten katılımınız kaldırıldı!", ephemeral=True
+      )
+    else:
+      self.participants.add(interaction.user.id)
+      await interaction.response.send_message(
+          "✅ Çekilişe başarıyla katıldın!", ephemeral=True
+      )
+
+    # Buton üzerindeki katılımcı sayısını güncelleyebiliriz veya mesajı güncelleyebiliriz
+    button.label = f"🎉 Katıl ({len(self.participants)})"
+    await interaction.message.edit(view=self)
+
+
+# --- ÇEKİLİŞ MODAL (FORM) PANELİ ---
+class GiveawayModal(discord.ui.Modal, title="🎉 Çekiliş Oluştur"):
+  duration = discord.ui.TextInput(
+      label="Süre",
+      placeholder="Örn: 10m (10 dakika), 1h (1 saat), 1d (1 gün)",
+      required=True,
+      max_length=10,
+  )
+
+  winners = discord.ui.TextInput(
+      label="Kazanan Sayısı",
+      placeholder="Örn: 1",
+      default="1",
+      required=True,
+      max_length=3,
+  )
+
+  prize = discord.ui.TextInput(
+      label="Ödül",
+      placeholder="Verilecek ödül nedir?",
+      required=True,
+      max_length=100,
+  )
+
+  description = discord.ui.TextInput(
+      label="Açıklama",
+      placeholder="Çekiliş şartları veya detayları buraya...",
+      style=discord.TextStyle.paragraph,
+      required=False,
+      max_length=500,
+  )
+
+  async def on_submit(self, interaction: discord.Interaction):
+    sec = parse_time(self.duration.value)
+    if sec <= 0:
+      await interaction.response.send_message(
+          "❌ Geçersiz süre formatı! Örn: `10m`, `1h`, `1d` kullanmalısın.",
+          ephemeral=True,
+      )
+      return
+
+    try:
+      w_count = int(self.winners.value)
+      if w_count < 1:
+        raise ValueError()
+    except ValueError:
+      await interaction.response.send_message(
+          "❌ Kazanan sayısı pozitif bir sayı olmalıdır!", ephemeral=True
+      )
+      return
+
+    end_time = datetime.now() + timedelta(seconds=sec)
+    timestamp = int(end_time.timestamp())
+
+    embed = discord.Embed(
+        title=self.prize.value,
+        description=(
+            f"{self.description.value}\n\n"
+            if self.description.value
+            else ""
+        )
+        + f"⏳ Bitiş: <t:{timestamp}:R> (<t:{timestamp}:F>)\n"
+        f"👑 Düzenleyen: {interaction.user.mention}\n"
+        f"🎟️ Katılımcı: **0**\n"
+        f"🏆 Kazanan Sayısı: **{w_count}**",
+        color=discord.Color.from_rgb(255, 140, 0),
+    )
+    embed.set_author(name="Vlandia Çekiliş Sistemi", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+
+    view = GiveawayView(sec, w_count, self.prize.value, self.description.value, interaction.user)
+    
+    await interaction.response.send_message(
+        "✨ Çekiliş başarıyla başlatıldı!", ephemeral=True
+    )
+    msg = await interaction.channel.send(embed=embed, view=view)
+
+    # Arka planda sürenin bitmesini bekleyen görev (Task)
+    async def finish_giveaway():
+      await asyncio.sleep(sec)
+      view.ended = True
+      for child in view.children:
+        child.disabled = True
+      
+      try:
+        await msg.edit(view=view)
+      except Exception:
+        pass
+
+      if len(view.participants) > 0:
+        actual_winners_count = min(w_count, len(view.participants))
+        winner_ids = random.sample(list(view.participants), actual_winners_count)
+        winner_mentions = ", ".join([f"<@{uid}>" for uid in winner_ids])
+        
+        result_embed = discord.Embed(
+            title=f"🎉 Çekiliş Sonuçlandı: {self.prize.value}",
+            description=f"🏆 **Kazananlar:** {winner_mentions}\n👑 **Düzenleyen:** {interaction.user.mention}",
+            color=discord.Color.green(),
+        )
+        await interaction.channel.send(content=winner_mentions, embed=result_embed)
+      else:
+        result_embed = discord.Embed(
+            title=f"🎉 Çekiliş Sonuçlandı: {self.prize.value}",
+            description="❌ Yeterli katılım olmadığı için kazanan seçilemedi.",
+            color=discord.Color.red(),
+        )
+        await interaction.channel.send(embed=result_embed)
+
+    bot.loop.create_task(finish_giveaway())
+
+
+# --- SLASH KOMUTU: /ÇEKİLİŞ ---
+@bot.tree.command(
+    name="çekiliş",
+    description="Vlandia temalı Türkçe çekiliş paneli açar.",
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def çekiliş(interaction: discord.Interaction):
+  await interaction.response.send_modal(GiveawayModal())
 
 
 # --- TICKET KAPATMA BUTONU ---
@@ -236,7 +432,7 @@ class TicketView(discord.ui.View):
     )
 
 
-# --- SLASH KOMUTU ---
+# --- TICKET SLASH KOMUTU ---
 @bot.tree.command(
     name="ticket_kur",
     description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",
@@ -290,10 +486,8 @@ async def ticket_kur(interaction: discord.Interaction):
 
 @bot.event
 async def on_member_join(member):
-  # Görsel Kart Gönderimi
   await send_welcome_card(member, "join")
 
-  # Log Kanalı Bildirimi
   embed = discord.Embed(
       title="📥 Sunucuya Biri Katıldı",
       description=(
@@ -311,10 +505,8 @@ async def on_member_join(member):
 
 @bot.event
 async def on_member_remove(member):
-  # Görsel Kart Gönderimi (Gidenler için de aynı şablon)
   await send_welcome_card(member, "remove")
 
-  # Log Kanalı Bildirimi
   embed = discord.Embed(
       title="📤 Sunucudan Biri Ayrıldı",
       description=f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)",
@@ -327,7 +519,6 @@ async def on_member_remove(member):
   await send_log(member.guild, embed)
 
 
-# 1. Mesaj Silindiğinde
 @bot.event
 async def on_message_delete(message):
   if message.author.bot or not message.guild:
@@ -362,7 +553,6 @@ async def on_message_delete(message):
   await send_log(message.guild, embed)
 
 
-# 2. Mesaj Düzenlendiğinde
 @bot.event
 async def on_message_edit(before, after):
   if before.author.bot or not before.guild or before.content == after.content:
@@ -380,7 +570,6 @@ async def on_message_edit(before, after):
   await send_log(before.guild, embed)
 
 
-# 3. Kanal Oluşturulduğunda
 @bot.event
 async def on_guild_channel_create(channel):
   creator = "Bilinmiyor"
@@ -405,7 +594,6 @@ async def on_guild_channel_create(channel):
   await send_log(channel.guild, embed)
 
 
-# 4. Kanal Silindiğinde
 @bot.event
 async def on_guild_channel_delete(channel):
   deleter = "Bilinmiyor"
@@ -429,7 +617,6 @@ async def on_guild_channel_delete(channel):
   await send_log(channel.guild, embed)
 
 
-# 5. Rol Oluşturulduğunda
 @bot.event
 async def on_guild_role_create(role):
   creator = "Bilinmiyor"
@@ -451,7 +638,6 @@ async def on_guild_role_create(role):
   await send_log(role.guild, embed)
 
 
-# 6. Rol Silindiğinde
 @bot.event
 async def on_guild_role_delete(role):
   deleter = "Bilinmiyor"
@@ -473,7 +659,6 @@ async def on_guild_role_delete(role):
   await send_log(role.guild, embed)
 
 
-# 7. Ses Kanalı Hareketleri
 @bot.event
 async def on_voice_state_update(member, before, after):
   if member.bot:
@@ -522,8 +707,8 @@ async def on_ready():
   bot.add_view(TicketView())
   bot.add_view(TicketCloseView())
   print(
-      f"{bot.user} olarak giriş yapıldı, Vlandia tema kartlı gelen-giden ve log"
-      " sistemi tam gaz aktif!"
+      f"{bot.user} olarak giriş yapıldı, Türkçe çekiliş ve Vlandia sistemleri"
+      " aktif!"
   )
   try:
     synced = await bot.tree.sync()

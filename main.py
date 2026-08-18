@@ -24,8 +24,9 @@ def run_flask():
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 🎟️-𝐓𝐢𝐜𝐤𝐞𝐭 Kanal ID'si
-TICKET_CHANNEL_ID = 1538271588254875740
+# ID Tanımlamaları
+TICKET_CHANNEL_ID = 1538271588254875740  # Komutun atılacağı kanal ID'si
+TICKET_CATEGORY_ID = 1538271572295688262  # Ticket'ların açılacağı kategori ID'si
 
 
 # --- TICKET KAPATMA BUTONU ---
@@ -105,8 +106,8 @@ class TicketView(discord.ui.View):
   ):
     guild = interaction.guild
 
-    # "Ticket" adındaki kategoriyi bulur
-    ticket_category = discord.utils.get(guild.categories, name="Ticket")
+    # Belirttiğin Kategori ID'si ile kategoriyi buluyoruz
+    ticket_category = guild.get_channel(TICKET_CATEGORY_ID)
 
     # Kullanıcı adını güvenli formata çevirir
     safe_name = "".join(
@@ -130,9 +131,15 @@ class TicketView(discord.ui.View):
         ),
     }
 
-    # Ticket'ı "Ticket" kategorisinde açar
+    # Ticket'ı direkt ID'si verilen kategorinin içine açar
     ticket_channel = await guild.create_text_channel(
-        name=channel_name, category=ticket_category, overwrites=overwrites
+        name=channel_name,
+        category=(
+            ticket_category
+            if isinstance(ticket_category, discord.CategoryChannel)
+            else None
+        ),
+        overwrites=overwrites,
     )
 
     embed = discord.Embed(
@@ -158,7 +165,7 @@ class TicketView(discord.ui.View):
     )
 
 
-# --- SLASH KOMUTU (Sadece ID'si eşleşen kanalda çalışır) ---
+# --- SLASH KOMUTU ---
 @bot.tree.command(
     name="ticket_kur",
     description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",

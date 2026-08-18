@@ -1,8 +1,26 @@
+import os
+import threading
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
+from flask import Flask
 
-# 1. Bot tanımlaması (Eğer değişken adın farklıysa burayı bot'una göre düzenle)
+# --- MİNİ FLASK SUNUCUSU (Render Port Uyarısını Çözmek İçin) ---
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+  return "Vlandia Pro Bot aktif ve çalışıyor! 🚀"
+
+
+def run_flask():
+  port = int(os.environ.get("PORT", 8080))
+  app.run(host="0.0.0.0", port=port)
+
+
+# --- BOT TANIMLAMALARI ---
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -25,8 +43,6 @@ class TicketCloseView(discord.ui.View):
     await interaction.response.send_message(
         "🔒 Bu kanal 5 saniye içinde kapatılıyor...", ephemeral=False
     )
-    import asyncio
-
     await asyncio.sleep(5)
     await interaction.channel.delete()
 
@@ -86,18 +102,16 @@ class TicketView(discord.ui.View):
   ):
     guild = interaction.guild
 
-    # 2. Açılan ticketlerin gitmesini istediğin "Ticket" kategorisini buluyoruz
-    ticket_category = discord.utils.get(
-        guild.categories, name="Ticket"
-    )  # İsim büyük/küçük harfe duyarlıdır
+    # "Ticket" adındaki kategoriyi bulur
+    ticket_category = discord.utils.get(guild.categories, name="Ticket")
 
-    # Kullanıcı adı temizleme (Örn: türkçe karakter veya boşluk hatası olmasın diye)
+    # Kullanıcı adını güvenli formata çevirir
     safe_name = "".join(
         c for c in interaction.user.name if c.isalnum()
     ).lower()
     channel_name = f"ticket-{safe_name}"
 
-    # Eğer aynı isimde kanal varsa tekrar açmasın
+    # Zaten açık kanalı varsa engeller
     existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
     if existing_channel:
       await interaction.response.send_message(
@@ -106,7 +120,6 @@ class TicketView(discord.ui.View):
       )
       return
 
-    # İzinler: Sadece kullanıcı ve yetkililer görebilsin
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
         interaction.user: discord.PermissionOverwrite(
@@ -114,11 +127,9 @@ class TicketView(discord.ui.View):
         ),
     }
 
-    # Kanalı "Ticket" kategorisinin içine oluşturuyoruz
+    # Ticket'ı "Ticket" kategorisinde açar
     ticket_channel = await guild.create_text_channel(
-        name=channel_name,
-        category=ticket_category,
-        overwrites=overwrites,
+        name=channel_name, category=ticket_category, overwrites=overwrites
     )
 
     embed = discord.Embed(
@@ -144,14 +155,13 @@ class TicketView(discord.ui.View):
     )
 
 
-# --- SLASH KOMUTU (Sadece 🎫-ticket kanalında çalışır) ---
+# --- SLASH KOMUTU (Sadece isminde ticket geçen kanallarda çalışır) ---
 @bot.tree.command(
     name="ticket_kur",
     description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
-  # Sadece isminde "ticket" geçen veya tam adı "🎫-ticket" olan kanalda çalışmasını istiyorsan:
   if "ticket" not in interaction.channel.name.lower():
     await interaction.response.send_message(
         "❌ Bu komut sadece **🎫-ticket** kanalında kullanılabilir!",
@@ -193,14 +203,12 @@ async def ticket_kur(interaction: discord.Interaction):
   )
 
 
-# --- BOT HAZIR OLDUĞUNDA ---
+# --- ON READY ---
 @bot.event
 async def on_ready():
-  bot.add_view(
-      TicketView()
-  )  # Bot yeniden başlatıldığında butonların çalışmaya devam etmesi için
+  bot.add_view(TicketView())
   bot.add_view(TicketCloseView())
-  print(f"{bot.user} olarak giriş yapıldı ve ticket görünümleri aktif!")
+  print(f"{bot.user} olarak giriş yapıldı!")
   try:
     synced = await bot.tree.sync()
     print(f"Synced {len(synced)} command(s).")
@@ -208,5 +216,11 @@ async def on_ready():
     print(e)
 
 
-# Bot token'ını buraya veya environment variable'a koyabilirsin
-# bot.run("SENIN_BOT_TOKENIN")
+# --- ANA ÇALIŞTIRMA BLOĞU ---
+if __name__ == "__main__":
+  # Flask'ı arka planda başlat
+  flask_thread = threading.Thread(target=run_flask)
+  flask_thread.start()
+
+  # Botu Token ile çalıştır (Render Environment Variables'tan çeker)
+  bot.run(os.environ.get("DISCORD_TOKEN"))

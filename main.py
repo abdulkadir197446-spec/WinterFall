@@ -24,6 +24,9 @@ def run_flask():
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# 🎟️-𝐓𝐢𝐜𝐤𝐞𝐭 Kanal ID'si
+TICKET_CHANNEL_ID = 1538271588254875740
+
 
 # --- TICKET KAPATMA BUTONU ---
 class TicketCloseView(discord.ui.View):
@@ -155,15 +158,14 @@ class TicketView(discord.ui.View):
     )
 
 
-# --- SLASH KOMUTU (Sadece 🎟️-𝐓𝐢𝐜𝐤𝐞𝐭 kanalında çalışır) ---
+# --- SLASH KOMUTU (Sadece ID'si eşleşen kanalda çalışır) ---
 @bot.tree.command(
     name="ticket_kur",
     description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
-  # Kanal adında "ticket" geçip geçmediğini kontrol ediyoruz
-  if "ticket" not in interaction.channel.name.lower():
+  if interaction.channel.id != TICKET_CHANNEL_ID:
     await interaction.response.send_message(
         "❌ Bu komut sadece **🎟️-𝐓𝐢𝐜𝐤𝐞𝐭** kanalında kullanılabilir!",
         ephemeral=True,

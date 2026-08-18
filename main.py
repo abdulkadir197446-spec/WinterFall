@@ -27,6 +27,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ID Tanımlamaları
 TICKET_CHANNEL_ID = 1538271588254875740  # Komutun atılacağı kanal ID'si
 TICKET_CATEGORY_ID = 1538271572295688262  # Ticket'ların açılacağı kategori ID'si
+STAFF_ROLE_ID = 1538271541781987449  # Etiketlenecek Yetkili Rol ID'si
 
 
 # --- TICKET KAPATMA BUTONU ---
@@ -106,7 +107,7 @@ class TicketView(discord.ui.View):
   ):
     guild = interaction.guild
 
-    # Belirttiğin Kategori ID'si ile kategoriyi buluyoruz
+    # Kategoriyi ID ile buluyoruz
     ticket_category = guild.get_channel(TICKET_CATEGORY_ID)
 
     # Kullanıcı adını güvenli formata çevirir
@@ -124,14 +125,20 @@ class TicketView(discord.ui.View):
       )
       return
 
+    # İzinler: Kullanıcı ve yetkili rolü görebilsin
+    staff_role = guild.get_role(STAFF_ROLE_ID)
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
         interaction.user: discord.PermissionOverwrite(
             read_messages=True, send_messages=True, attach_files=True
         ),
     }
+    if staff_role:
+      overwrites[staff_role] = discord.PermissionOverwrite(
+          read_messages=True, send_messages=True, attach_files=True
+      )
 
-    # Ticket'ı direkt ID'si verilen kategorinin içine açar
+    # Ticket kanalını oluştur
     ticket_channel = await guild.create_text_channel(
         name=channel_name,
         category=(
@@ -142,23 +149,39 @@ class TicketView(discord.ui.View):
         overwrites=overwrites,
     )
 
+    # Havalı Karşılama Embed'i
     embed = discord.Embed(
-        title=f"Vlandia Pack | {category_type} Talebi",
+        title=f"Vlandia Pack | {category_type} Destek Talebi",
         description=(
-            f"Destek talebiniz **{category_type}** kategorisinde açıldı"
-            f" {interaction.user.mention}.\n\nLütfen yetkililerin sizinle"
-            " ilgilenmesini bekleyin ve talebinizin detaylarını"
-            " buraya yazın."
+            f"Hoş geldin {interaction.user.mention}! 🚀\n\n"
+            f"**{category_type}** ile ilgili talebin başarıyla alındı. Lütfen"
+            " sorununuzu veya talebinizi detaylı bir şekilde açıklayın,"
+            " yetkili ekibimiz en kısa sürede sizinle ilgilenecektir.\n\n"
+            "⚠️ *Gereksiz yere ticket açmak cezai işlem sebep olabilir.*"
         ),
         color=discord.Color.from_rgb(43, 45, 49),
     )
-    embed.set_footer(text="Vlandia Pro Bot Destek Sistemi")
+    embed.set_author(
+        name="Vlandia Pro Bot • Güvenli Destek",
+        icon_url=guild.icon.url if guild.icon else None,
+    )
+    embed.set_footer(
+        text="Vlandia Pack © 2026",
+        icon_url=(
+            interaction.client.user.avatar.url
+            if interaction.client.user.avatar
+            else None
+        ),
+    )
 
+    # Etiketleme mesajı (Kullanıcı + Belirttiğin Yetkili Rolü)
+    role_ping = f"<@&{STAFF_ROLE_ID}>" if staff_role else "@everyone"
     await ticket_channel.send(
-        content=f"{interaction.user.mention}",
+        content=f"{interaction.user.mention} | {role_ping}",
         embed=embed,
         view=TicketCloseView(),
     )
+
     await interaction.response.send_message(
         f"✅ Destek kanalın başarıyla oluşturuldu: {ticket_channel.mention}",
         ephemeral=True,

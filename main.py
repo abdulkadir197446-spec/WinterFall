@@ -155,16 +155,17 @@ class TicketView(discord.ui.View):
     )
 
 
-# --- SLASH KOMUTU (Sadece isminde ticket geçen kanallarda çalışır) ---
+# --- SLASH KOMUTU (Sadece 🎟️-𝐓𝐢𝐜𝐤𝐞𝐭 kanalında çalışır) ---
 @bot.tree.command(
     name="ticket_kur",
     description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
+  # Kanal adında "ticket" geçip geçmediğini kontrol ediyoruz
   if "ticket" not in interaction.channel.name.lower():
     await interaction.response.send_message(
-        "❌ Bu komut sadece **🎫-ticket** kanalında kullanılabilir!",
+        "❌ Bu komut sadece **🎟️-𝐓𝐢𝐜𝐤𝐞𝐭** kanalında kullanılabilir!",
         ephemeral=True,
     )
     return
@@ -218,9 +219,6 @@ async def on_ready():
 
 # --- ANA ÇALIŞTIRMA BLOĞU ---
 if __name__ == "__main__":
-  # Flask'ı arka planda başlat
   flask_thread = threading.Thread(target=run_flask)
   flask_thread.start()
-
-  # Botu Token ile çalıştır (Render Environment Variables'tan çeker)
   bot.run(os.environ.get("DISCORD_TOKEN"))

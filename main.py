@@ -28,7 +28,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TICKET_CHANNEL_ID = 1538271588254875740  # Komutun atılacağı kanal ID'si
 TICKET_CATEGORY_ID = 1538271572295688262  # Ticket'ların açılacağı kategori ID'si
 STAFF_ROLE_ID = 1538271541781987449  # Etiketlenecek Yetkili Rol ID'si
-LOG_CHANNEL_ID = 1538982916087095296  # Kuş uçsa haber alacağımız Log Kanalı ID'si
+LOG_CHANNEL_ID = 1538982916087095296  # Log Kanalı ID'si
 
 
 # --- YARDIMCI LOG FONKSİYONU ---
@@ -117,17 +117,13 @@ class TicketView(discord.ui.View):
       self, interaction: discord.Interaction, category_type: str
   ):
     guild = interaction.guild
-
-    # Kategoriyi ID ile buluyoruz
     ticket_category = guild.get_channel(TICKET_CATEGORY_ID)
 
-    # Kullanıcı adını güvenli formata çevirir
     safe_name = "".join(
         c for c in interaction.user.name if c.isalnum()
     ).lower()
     channel_name = f"ticket-{safe_name}"
 
-    # Zaten açık kanalı varsa engeller
     existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
     if existing_channel:
       await interaction.response.send_message(
@@ -136,7 +132,6 @@ class TicketView(discord.ui.View):
       )
       return
 
-    # İzinler: Kullanıcı ve yetkili rolü görebilsin
     staff_role = guild.get_role(STAFF_ROLE_ID)
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -149,7 +144,6 @@ class TicketView(discord.ui.View):
           read_messages=True, send_messages=True, attach_files=True
       )
 
-    # Ticket kanalını oluştur
     ticket_channel = await guild.create_text_channel(
         name=channel_name,
         category=(
@@ -160,7 +154,6 @@ class TicketView(discord.ui.View):
         overwrites=overwrites,
     )
 
-    # Havalı Karşılama Embed'i
     embed = discord.Embed(
         title=f"Vlandia Pack | {category_type} Destek Talebi",
         description=(
@@ -185,7 +178,6 @@ class TicketView(discord.ui.View):
         ),
     )
 
-    # Etiketleme mesajı (Kullanıcı + Belirttiğin Yetkili Rolü)
     role_ping = f"<@&{STAFF_ROLE_ID}>" if staff_role else "@everyone"
     await ticket_channel.send(
         content=f"{interaction.user.mention} | {role_ping}",
@@ -248,21 +240,39 @@ async def ticket_kur(interaction: discord.Interaction):
 
 
 # ==========================================
-# 🦅 KUŞUN UÇMASINDAN HABerdar EDEN LOG SİSTEMİ
+# 🦅 GELİŞMİŞ KUŞ UÇURMAYAN LOG SİSTEMİ
 # ==========================================
 
 
-# 1. Mesaj Silindiğinde
+# 1. Mesaj Silindiğinde (Kim Sildi Tespiti ile)
 @bot.event
 async def on_message_delete(message):
   if message.author.bot or not message.guild:
     return
+
+  deleter = "Bilinmiyor (Kendi silmiş olabilir)"
+  try:
+    async for entry in message.guild.audit_logs(
+        limit=1, action=discord.AuditLogAction.message_delete
+    ):
+      # Hedef veya zaman kontrolüyle eşleştirme yapılabilir
+      if (
+          entry.target
+          and entry.target.id == message.author.id
+          and (discord.utils.utcnow() - entry.created_at).total_seconds() < 5
+      ):
+        deleter = entry.user.mention
+        break
+  except Exception:
+    pass
+
   embed = discord.Embed(
       title="🗑️ Mesaj Silindi",
       description=(
-          f"**Kanal:** {message.channel.mention}\n**Yazan:**"
-          f" {message.author.mention}\n**Silinen Mesaj:**\n```"
-          f"{message.content or 'İçerik yok (Fotoğraf veya Embed olabilir)'}```"
+          f"**Kanal:** {message.channel.mention}\n**Mesaj Sahibi:**"
+          f" {message.author.mention}\n**İşlemi Yapan (Silen):**"
+          f" {deleter}\n**Silinen İçerik:**\n```"
+          f"{message.content or 'İçerik yok (Fotoğraf/Embed)'}```"
       ),
       color=discord.Color.red(),
   )
@@ -278,7 +288,7 @@ async def on_message_edit(before, after):
   embed = discord.Embed(
       title="✏️ Mesaj Düzenlendi",
       description=(
-          f"**Kanal:** {before.channel.mention}\n**Kullanıcı:**"
+          f"**Kanal:** {before.channel.mention}\n**İşlem Yapan (Kullanıcı):**"
           f" {before.author.mention}\n\n**Eski Hali:**\n```"
           f"{before.content}```\n**Yeni Hali:**\n```{after.content}```"
       ),
@@ -294,12 +304,14 @@ async def on_member_join(member):
   embed = discord.Embed(
       title="📥 Sunucuya Biri Katıldı",
       description=(
-          f"Hoş geldin {member.mention} (`{member.name}`)!\nHesap Oluşturulma"
-          f" Tarihi: {member.created_at.strftime('%d-%m-%Y %H:%M:%S')}"
+          f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)\n**Hesap"
+          f" Kuruluş:** {member.created_at.strftime('%d-%m-%Y %H:%M:%S')}"
       ),
       color=discord.Color.green(),
   )
-  embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+  embed.set_thumbnail(
+      url=member.avatar.url if member.avatar else member.default_avatar.url
+  )
   embed.set_footer(text=f"Kullanıcı ID: {member.id}")
   await send_log(member.guild, embed)
 
@@ -309,20 +321,36 @@ async def on_member_join(member):
 async def on_member_remove(member):
   embed = discord.Embed(
       title="📤 Sunucudan Biri Ayrıldı",
-      description=f"Görüşürüz {member.mention} (`{member.name}`).",
+      description=f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)",
       color=discord.Color.dark_red(),
   )
-  embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+  embed.set_thumbnail(
+      url=member.avatar.url if member.avatar else member.default_avatar.url
+  )
   embed.set_footer(text=f"Kullanıcı ID: {member.id}")
   await send_log(member.guild, embed)
 
 
-# 5. Kanal Oluşturulduğunda
+# 5. Kanal Oluşturulduğunda (Kim Yaptı Tespiti)
 @bot.event
 async def on_guild_channel_create(channel):
+  creator = "Bilinmiyor"
+  try:
+    async for entry in channel.guild.audit_logs(
+        limit=1, action=discord.AuditLogAction.channel_create
+    ):
+      if entry.target.id == channel.id:
+        creator = entry.user.mention
+        break
+  except Exception:
+    pass
+
   embed = discord.Embed(
       title="➕ Kanal Oluşturuldu",
-      description=f"**Kanal Adı:** `{channel.name}`\n**Tür:** `{channel.type}`",
+      description=(
+          f"**Kanal Adı:** `{channel.name}`\n**Tür:**"
+          f" `{channel.type}`\n**İşlemi Yapan:** {creator}"
+      ),
       color=discord.Color.blue(),
   )
   await send_log(channel.guild, embed)
@@ -331,9 +359,22 @@ async def on_guild_channel_create(channel):
 # 6. Kanal Silindiğinde
 @bot.event
 async def on_guild_channel_delete(channel):
+  deleter = "Bilinmiyor"
+  try:
+    async for entry in channel.guild.audit_logs(
+        limit=1, action=discord.AuditLogAction.channel_delete
+    ):
+      if entry.target.id == channel.id:
+        deleter = entry.user.mention
+        break
+  except Exception:
+    pass
+
   embed = discord.Embed(
       title="➖ Kanal Silindi",
-      description=f"**Kanal Adı:** `{channel.name}`",
+      description=(
+          f"**Kanal Adı:** `{channel.name}`\n**İşlemi Yapan:** {deleter}"
+      ),
       color=discord.Color.dark_blue(),
   )
   await send_log(channel.guild, embed)
@@ -342,9 +383,20 @@ async def on_guild_channel_delete(channel):
 # 7. Rol Oluşturulduğunda
 @bot.event
 async def on_guild_role_create(role):
+  creator = "Bilinmiyor"
+  try:
+    async for entry in role.guild.audit_logs(
+        limit=1, action=discord.AuditLogAction.role_create
+    ):
+      if entry.target.id == role.id:
+        creator = entry.user.mention
+        break
+  except Exception:
+    pass
+
   embed = discord.Embed(
       title="✨ Rol Oluşturuldu",
-      description=f"**Rol Adı:** `{role.name}`",
+      description=f"**Rol Adı:** `{role.name}`\n**İşlemi Yapan:** {creator}",
       color=discord.Color.gold(),
   )
   await send_log(role.guild, embed)
@@ -353,38 +405,63 @@ async def on_guild_role_create(role):
 # 8. Rol Silindiğinde
 @bot.event
 async def on_guild_role_delete(role):
+  deleter = "Bilinmiyor"
+  try:
+    async for entry in role.guild.audit_logs(
+        limit=1, action=discord.AuditLogAction.role_delete
+    ):
+      if entry.target.id == role.id:
+        deleter = entry.user.mention
+        break
+  except Exception:
+    pass
+
   embed = discord.Embed(
       title="❌ Rol Silindi",
-      description=f"**Rol Adı:** `{role.name}`",
+      description=f"**Rol Adı:** `{role.name}`\n**İşlemi Yapan:** {deleter}",
       color=discord.Color.dark_gold(),
   )
   await send_log(role.guild, embed)
 
 
-# 9. Ses Kanalı Hareketleri (Giriş/Çıkış/Yer Değiştirme)
+# 9. Ses Kanalı Hareketleri
 @bot.event
 async def on_voice_state_update(member, before, after):
   if member.bot:
     return
-  
+
   if before.channel is None and after.channel is not None:
     embed = discord.Embed(
         title="🔊 Ses Kanalına Katıldı",
-        description=f"{member.mention} üyesi **{after.channel.name}** ses kanalına giriş yaptı.",
+        description=(
+            f"**Üye (İşlem Gören):** {member.mention}\n**Kanal:**"
+            f" **{after.channel.name}**"
+        ),
         color=discord.Color.teal(),
     )
     await send_log(member.guild, embed)
   elif before.channel is not None and after.channel is None:
     embed = discord.Embed(
         title="🔇 Ses Kanalından Ayrıldı",
-        description=f"{member.mention} üyesi **{before.channel.name}** ses kanalından ayrıldı.",
+        description=(
+            f"**Üye (İşlem Gören):** {member.mention}\n**Kanal:**"
+            f" **{before.channel.name}**"
+        ),
         color=discord.Color.dark_teal(),
     )
     await send_log(member.guild, embed)
-  elif before.channel != after.channel and before.channel is not None and after.channel is not None:
+  elif (
+      before.channel != after.channel
+      and before.channel is not None
+      and after.channel is not None
+  ):
     embed = discord.Embed(
         title="🔀 Ses Kanalı Değiştirdi",
-        description=f"{member.mention} üyesi **{before.channel.name}** kanalından **{after.channel.name}** kanalına geçiş yaptı.",
+        description=(
+            f"**Üye (İşlem Gören):** {member.mention}\n**Eski Kanal:**"
+            f" **{before.channel.name}** ➡️ **Yeni Kanal:**"
+            f" **{after.channel.name}**"
+        ),
         color=discord.Color.blurple(),
     )
     await send_log(member.guild, embed)
@@ -395,7 +472,10 @@ async def on_voice_state_update(member, before, after):
 async def on_ready():
   bot.add_view(TicketView())
   bot.add_view(TicketCloseView())
-  print(f"{bot.user} olarak giriş yapıldı ve log sistemi kuş uçurtmayacak şekilde aktif!")
+  print(
+      f"{bot.user} olarak giriş yapıldı ve log sistemi işlem yapan/gören"
+      " detaylarıyla aktif!"
+  )
   try:
     synced = await bot.tree.sync()
     print(f"Synced {len(synced)} command(s).")

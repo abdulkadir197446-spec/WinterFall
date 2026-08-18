@@ -2,69 +2,40 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-# Not: Botunun 'bot' veya 'client' tanımına göre burayı uyarlayabilirsin.
-# Örn: bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+# 1. Bot tanımlaması (Eğer değişken adın farklıysa burayı bot'una göre düzenle)
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 
-# --- TICKET BUTONLARI VE GÖRÜNÜMÜ ---
+# --- TICKET KAPATMA BUTONU ---
+class TicketCloseView(discord.ui.View):
+
+  def __init__(self):
+    super().__init__(timeout=None)
+
+  @discord.ui.button(
+      label="Ticket'ı Kapat",
+      style=discord.ButtonStyle.danger,
+      emoji="🔒",
+      custom_id="ticket_close",
+  )
+  async def close_button(
+      self, interaction: discord.Interaction, button: discord.ui.Button
+  ):
+    await interaction.response.send_message(
+        "🔒 Bu kanal 5 saniye içinde kapatılıyor...", ephemeral=False
+    )
+    import asyncio
+
+    await asyncio.sleep(5)
+    await interaction.channel.delete()
+
+
+# --- TICKET AÇMA BUTONLARI VE GÖRÜNÜMÜ ---
 class TicketView(discord.ui.View):
 
   def __init__(self):
-    super().__init__(timeout=None)  # Butonların süresinin bitmemesi için
-
-  async def create_ticket(
-      interaction: discord.Interaction, category_name: string
-  ):
-    guild = interaction.guild
-    # Yetkili rolü veya kategori ID'lerini buraya ekleyebilirsin
-    # Örnek olarak herkesin göremeyeceği özel bir kategoriye açtıralım:
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        interaction.user: discord.PermissionOverwrite(
-            read_messages=True, send_messages=True
-        ),
-        # bot rolü veya yetkili rolü buraya eklenebilir
-    }
-
-    # Kullanıcıya özel kanal ismi oluşturma (örn: destek-ohrid)
-    channel_name = f"ticket-{interaction.user.name.lower()}"
-    existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
-
-    if existing_channel:
-      await interaction.response.send_message(
-          f"Zaten açık olan bir ticket kanalın bulunuyor: {existing_channel.mention}",
-          ephemeral=True,
-      )
-      return
-
-    # Kanalı oluştur
-    ticket_channel = await guild.create_text_channel(
-        name=channel_name, overwrites=overwrites
-    )
-    await interaction.response.send_message(
-        f"Ticket kanalın başarıyla oluşturuldu: {ticket_channel.mention} 🚀",
-        ephemeral=True,
-    )
-
-    # Ticket kanalının içine gönderilecek karşılama embed'i
-    embed = discord.Embed(
-        title="🎫 Destek Talebi Oluşturuldu",
-        description=(
-            f"Merhaba {interaction.user.mention},\nYetkililerimiz en kısa sürede"
-            " seninle ilgilenecektir.\n\nLütfen sorununuzu veya talebinizi"
-            " detaylı bir şekilde açıklayın."
-        ),
-        color=discord.Color.from_rgb(43, 45, 49),
-    )
-    embed.set_footer(
-        text="Vlandia Pro Bot • Güvenli Destek Sistemi",
-        icon_url=guild.icon.url if guild.icon else None,
-    )
-
-    close_view = TicketCloseView()
-    await ticket_channel.send(
-        content=f"{interaction.user.mention} | @everyone", embed=embed, view=close_view
-    )
+    super().__init__(timeout=None)
 
   @discord.ui.button(
       label="Partnerlik",
@@ -114,9 +85,28 @@ class TicketView(discord.ui.View):
       self, interaction: discord.Interaction, category_type: str
   ):
     guild = interaction.guild
-    # Ticket'ı görebilecek yetkili rolünün ID'sini buraya yazabilirsin (isteğe bağlı)
-    # staff_role = guild.get_role(ROL_ID_BURAYA)
 
+    # 2. Açılan ticketlerin gitmesini istediğin "Ticket" kategorisini buluyoruz
+    ticket_category = discord.utils.get(
+        guild.categories, name="Ticket"
+    )  # İsim büyük/küçük harfe duyarlıdır
+
+    # Kullanıcı adı temizleme (Örn: türkçe karakter veya boşluk hatası olmasın diye)
+    safe_name = "".join(
+        c for c in interaction.user.name if c.isalnum()
+    ).lower()
+    channel_name = f"ticket-{safe_name}"
+
+    # Eğer aynı isimde kanal varsa tekrar açmasın
+    existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
+    if existing_channel:
+      await interaction.response.send_message(
+          f"Zaten açık olan bir ticket kanalın bulunuyor: {existing_channel.mention}",
+          ephemeral=True,
+      )
+      return
+
+    # İzinler: Sadece kullanıcı ve yetkililer görebilsin
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
         interaction.user: discord.PermissionOverwrite(
@@ -124,25 +114,22 @@ class TicketView(discord.ui.View):
         ),
     }
 
-    # Kullanıcı adı temizleme (Türkçe karakter veya boşluk sorun olmasın diye)
-    safe_name = "".join(
-        c for c in interaction.user.name if c.isalnum()
-    ).lower()
-    channel_name = f"ticket-{safe_name}"
-
+    # Kanalı "Ticket" kategorisinin içine oluşturuyoruz
     ticket_channel = await guild.create_text_channel(
-        name=channel_name, overwrites=overwrites
+        name=channel_name,
+        category=ticket_category,
+        overwrites=overwrites,
     )
 
     embed = discord.Embed(
-        title=f"Vlandia | {category_type} Talebi",
+        title=f"Vlandia Pack | {category_type} Talebi",
         description=(
             f"Destek talebiniz **{category_type}** kategorisinde açıldı"
             f" {interaction.user.mention}.\n\nLütfen yetkililerin sizinle"
             " ilgilenmesini bekleyin ve talebinizin detaylarını"
-            " yazın."
+            " buraya yazın."
         ),
-        color=discord.Color.blurple(),
+        color=discord.Color.from_rgb(43, 45, 49),
     )
     embed.set_footer(text="Vlandia Pro Bot Destek Sistemi")
 
@@ -157,37 +144,21 @@ class TicketView(discord.ui.View):
     )
 
 
-# --- TICKET KAPATMA BUTONU ---
-class TicketCloseView(discord.ui.View):
-
-  def __init__(self):
-    super().__init__(timeout=None)
-
-  @discord.ui.button(
-      label="Tohumu / Ticket'ı Kapat",
-      style=discord.ButtonStyle.danger,
-      emoji="🔒",
-      custom_id="ticket_close",
-  )
-  async def close_button(
-      self, interaction: discord.Interaction, button: discord.ui.Button
-  ):
-    await interaction.response.send_message(
-        "🔒 Bu kanal 5 saniye içinde kapatılıyor...", ephemeral=False
-    )
-    import asyncio
-
-    await asyncio.sleep(5)
-    await interaction.channel.delete()
-
-
-# --- SLASH KOMUTU ---
+# --- SLASH KOMUTU (Sadece 🎫-ticket kanalında çalışır) ---
 @bot.tree.command(
     name="ticket_kur",
     description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",
 )
 @app_commands.checks.has_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
+  # Sadece isminde "ticket" geçen veya tam adı "🎫-ticket" olan kanalda çalışmasını istiyorsan:
+  if "ticket" not in interaction.channel.name.lower():
+    await interaction.response.send_message(
+        "❌ Bu komut sadece **🎫-ticket** kanalında kullanılabilir!",
+        ephemeral=True,
+    )
+    return
+
   embed = discord.Embed(
       title="Vlandia Pack | Destek & İletişim",
       description=(
@@ -220,3 +191,22 @@ async def ticket_kur(interaction: discord.Interaction):
   await interaction.response.send_message(
       "✨ Ticket Paneli bu kanalda başarıyla kuruldu!", ephemeral=True
   )
+
+
+# --- BOT HAZIR OLDUĞUNDA ---
+@bot.event
+async def on_ready():
+  bot.add_view(
+      TicketView()
+  )  # Bot yeniden başlatıldığında butonların çalışmaya devam etmesi için
+  bot.add_view(TicketCloseView())
+  print(f"{bot.user} olarak giriş yapıldı ve ticket görünümleri aktif!")
+  try:
+    synced = await bot.tree.sync()
+    print(f"Synced {len(synced)} command(s).")
+  except Exception as e:
+    print(e)
+
+
+# Bot token'ını buraya veya environment variable'a koyabilirsin
+# bot.run("SENIN_BOT_TOKENIN")

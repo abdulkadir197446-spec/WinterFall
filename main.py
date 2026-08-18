@@ -1,10 +1,12 @@
 import os
 import threading
 import asyncio
+import io
 import discord
 from discord import app_commands
 from discord.ext import commands
 from flask import Flask
+from easy_pil import Editor, Canvas, Font
 
 # --- MİNİ FLASK SUNUCUSU (Render Port Uyarısını Çözmek İçin) ---
 app = Flask(__name__)
@@ -28,7 +30,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TICKET_CHANNEL_ID = 1538271588254875740  # Komutun atılacağı kanal ID'si
 TICKET_CATEGORY_ID = 1538271572295688262  # Ticket'ların açılacağı kategori ID'si
 STAFF_ROLE_ID = 1538271541781987449  # Etiketlenecek Yetkili Rol ID'si
-LOG_CHANNEL_ID = 1538982916087095296  # Log Kanalı ID'si
+LOG_CHANNEL_ID = 1538982916087095296  # Kuş uçsa haber alacağımız Log Kanalı ID'si
+WELCOME_CHANNEL_ID = 1538271609419210835  # Gelen-Giden Kart Kanalı ID'si
 
 
 # --- YARDIMCI LOG FONKSİYONU ---
@@ -39,6 +42,48 @@ async def send_log(guild: discord.Guild, embed: discord.Embed):
       await log_channel.send(embed=embed)
     except Exception as e:
       print(f"Log gönderilemedi: {e}")
+
+
+# --- VLANDİA TEMALI GİRİŞ/ÇIKIŞ KART OLUŞTURUCU ---
+async def send_welcome_card(member: discord.member, action_type: str):
+  channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
+  if not channel:
+    return
+
+  try:
+    # Arka plan için Vlandia tarzı koyu/teknolojik bir tuval oluşturuyoruz (900x500 boyutunda)
+    background = Canvas(900, 500, color=(20, 22, 25))
+    editor = Editor(background)
+
+    # Çerçeve ve Vlandia tarzı detaylar (örneğin köşelere teknolojik çizgiler/çerçeve)
+    editor.rectangle((20, 20, 860, 460), outline=(255, 140, 0), stroke_width=3)
+
+    # Kullanıcının Avatarını Çekme ve Daire Yapma
+    user_avatar_image = await member.avatar.read() if member.avatar else await member.default_avatar.read()
+    avatar_image = Editor(user_avatar_image).resize((160, 160)).circle_image()
+
+    # Avatarı kartın tam ortasına yerleştirme
+    editor.paste(avatar_image, (370, 110))
+
+    # Yazı Tipleri (Varsayılan sistem fontu veya yüklenen fontlar)
+    title_font = Font.load_default(size=40)
+    name_font = Font.load_default(size=35)
+
+    # Üst metin (Hoşgeldin / Güle Güle)
+    title_text = f"SENİNLE BERABER {member.guild.member_count} KİŞİ OLDUK!" if action_type == "join" else f"GÖRÜŞÜRÜZ {member.name.upper()}"
+    editor.text((450, 50), title_text, color=(255, 255, 255), font=title_font, align="center")
+
+    # Kullanıcı adı alt kısma
+    editor.text((450, 340), member.name.upper(), color=(255, 140, 0), font=name_font, align="center")
+
+    # Dosyaya dönüştürüp kanala gönderme
+    file = discord.File(fp=editor.image_bytes, filename="vlandia_card.png")
+    
+    message_content = f"{member.mention} Hoşgeldin! Senle beraber **{member.guild.member_count}** kişi olduk." if action_type == "join" else f"**{member.name}** aramızdan ayrıldı."
+    await channel.send(content=message_content, file=file)
+
+  except Exception as e:
+    print(f"Giriş/Çıkış kartı oluşturulurken hata: {e}")
 
 
 # --- TICKET KAPATMA BUTONU ---
@@ -240,11 +285,49 @@ async def ticket_kur(interaction: discord.Interaction):
 
 
 # ==========================================
-# 🦅 GELİŞMİŞ KUŞ UÇURMAYAN LOG SİSTEMİ
+# 🦅 GİRİŞ / ÇIKIŞ VE LOG SİSTEMİ OLAYLARI
 # ==========================================
 
+@bot.event
+async def on_member_join(member):
+  # Görsel Kart Gönderimi
+  await send_welcome_card(member, "join")
 
-# 1. Mesaj Silindiğinde (Kim Sildi Tespiti ile)
+  # Log Kanalı Bildirimi
+  embed = discord.Embed(
+      title="📥 Sunucuya Biri Katıldı",
+      description=(
+          f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)\n**Hesap"
+          f" Kuruluş:** {member.created_at.strftime('%d-%m-%Y %H:%M:%S')}"
+      ),
+      color=discord.Color.green(),
+  )
+  embed.set_thumbnail(
+      url=member.avatar.url if member.avatar else member.default_avatar.url
+  )
+  embed.set_footer(text=f"Kullanıcı ID: {member.id}")
+  await send_log(member.guild, embed)
+
+
+@bot.event
+async def on_member_remove(member):
+  # Görsel Kart Gönderimi (Gidenler için de aynı şablon)
+  await send_welcome_card(member, "remove")
+
+  # Log Kanalı Bildirimi
+  embed = discord.Embed(
+      title="📤 Sunucudan Biri Ayrıldı",
+      description=f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)",
+      color=discord.Color.dark_red(),
+  )
+  embed.set_thumbnail(
+      url=member.avatar.url if member.avatar else member.default_avatar.url
+  )
+  embed.set_footer(text=f"Kullanıcı ID: {member.id}")
+  await send_log(member.guild, embed)
+
+
+# 1. Mesaj Silindiğinde
 @bot.event
 async def on_message_delete(message):
   if message.author.bot or not message.guild:
@@ -255,7 +338,6 @@ async def on_message_delete(message):
     async for entry in message.guild.audit_logs(
         limit=1, action=discord.AuditLogAction.message_delete
     ):
-      # Hedef veya zaman kontrolüyle eşleştirme yapılabilir
       if (
           entry.target
           and entry.target.id == message.author.id
@@ -298,40 +380,7 @@ async def on_message_edit(before, after):
   await send_log(before.guild, embed)
 
 
-# 3. Sunucuya Üye Katıldığında
-@bot.event
-async def on_member_join(member):
-  embed = discord.Embed(
-      title="📥 Sunucuya Biri Katıldı",
-      description=(
-          f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)\n**Hesap"
-          f" Kuruluş:** {member.created_at.strftime('%d-%m-%Y %H:%M:%S')}"
-      ),
-      color=discord.Color.green(),
-  )
-  embed.set_thumbnail(
-      url=member.avatar.url if member.avatar else member.default_avatar.url
-  )
-  embed.set_footer(text=f"Kullanıcı ID: {member.id}")
-  await send_log(member.guild, embed)
-
-
-# 4. Sunucudan Üye Ayrıldığında
-@bot.event
-async def on_member_remove(member):
-  embed = discord.Embed(
-      title="📤 Sunucudan Biri Ayrıldı",
-      description=f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)",
-      color=discord.Color.dark_red(),
-  )
-  embed.set_thumbnail(
-      url=member.avatar.url if member.avatar else member.default_avatar.url
-  )
-  embed.set_footer(text=f"Kullanıcı ID: {member.id}")
-  await send_log(member.guild, embed)
-
-
-# 5. Kanal Oluşturulduğunda (Kim Yaptı Tespiti)
+# 3. Kanal Oluşturulduğunda
 @bot.event
 async def on_guild_channel_create(channel):
   creator = "Bilinmiyor"
@@ -356,7 +405,7 @@ async def on_guild_channel_create(channel):
   await send_log(channel.guild, embed)
 
 
-# 6. Kanal Silindiğinde
+# 4. Kanal Silindiğinde
 @bot.event
 async def on_guild_channel_delete(channel):
   deleter = "Bilinmiyor"
@@ -380,7 +429,7 @@ async def on_guild_channel_delete(channel):
   await send_log(channel.guild, embed)
 
 
-# 7. Rol Oluşturulduğunda
+# 5. Rol Oluşturulduğunda
 @bot.event
 async def on_guild_role_create(role):
   creator = "Bilinmiyor"
@@ -402,7 +451,7 @@ async def on_guild_role_create(role):
   await send_log(role.guild, embed)
 
 
-# 8. Rol Silindiğinde
+# 6. Rol Silindiğinde
 @bot.event
 async def on_guild_role_delete(role):
   deleter = "Bilinmiyor"
@@ -424,7 +473,7 @@ async def on_guild_role_delete(role):
   await send_log(role.guild, embed)
 
 
-# 9. Ses Kanalı Hareketleri
+# 7. Ses Kanalı Hareketleri
 @bot.event
 async def on_voice_state_update(member, before, after):
   if member.bot:
@@ -473,8 +522,8 @@ async def on_ready():
   bot.add_view(TicketView())
   bot.add_view(TicketCloseView())
   print(
-      f"{bot.user} olarak giriş yapıldı ve log sistemi işlem yapan/gören"
-      " detaylarıyla aktif!"
+      f"{bot.user} olarak giriş yapıldı, Vlandia tema kartlı gelen-giden ve log"
+      " sistemi tam gaz aktif!"
   )
   try:
     synced = await bot.tree.sync()

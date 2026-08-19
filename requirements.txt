@@ -1,6 +1,4 @@
 discord.py
-Flask
-gTTS
+python-dotenv
+flask
 easy-pil
-requests
-PyNaCl

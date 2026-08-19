@@ -7,8 +7,8 @@ from io import BytesIO
 import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load_dotenv  # Hatalı tire (_) ile düzeltildi
-import easy_pil  # Resim/Canvas işlemleri için
+from dotenv import load_dotenv
+import easy_pil
 from flask import Flask
 
 # .env dosyasındaki token ve ayarları yükle
@@ -28,12 +28,10 @@ def run_flask():
   app.run(host="0.0.0.0", port=8080)
 
 
-# Bot ayarları ve Intent'ler
+# Bot ayarları ve Intent'ler (Güncel discord.py 2.7.1 uyumlu)
 intents = discord.Intents.default()
-intents.guilds = True
-intents.guild_messages = True
 intents.message_content = True
-intents.guild_members = True
+intents.members = True  # guild_members yerine güncel kullanım
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -454,7 +452,7 @@ async def on_member_join(member: discord.Member):
     await channel.send(
         content=(
             f"<@{member.id}> Hoşgeldin brom ! senle beraber"
-            f" **{member.guild.memberCount}** kişi olduk."
+            f" **{member.guild.member_count}** kişi olduk."
         ),
         file=file,
     )

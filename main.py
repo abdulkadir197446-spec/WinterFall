@@ -157,7 +157,6 @@ class GiveawayView(discord.ui.View):
           "✅ Çekilişe başarıyla katıldın!", ephemeral=True
       )
 
-    # Buton üzerindeki katılımcı sayısını güncelleyebiliriz veya mesajı güncelleyebiliriz
     button.label = f"🎉 Katıl ({len(self.participants)})"
     await interaction.message.edit(view=self)
 
@@ -238,7 +237,6 @@ class GiveawayModal(discord.ui.Modal, title="🎉 Çekiliş Oluştur"):
     )
     msg = await interaction.channel.send(embed=embed, view=view)
 
-    # Arka planda sürenin bitmesini bekleyen görev (Task)
     async def finish_giveaway():
       await asyncio.sleep(sec)
       view.ended = True

@@ -28,18 +28,18 @@ def run_flask():
   app.run(host="0.0.0.0", port=8080)
 
 
-# Bot ayarları ve Intent'ler (Güncel discord.py 2.7.1 uyumlu)
+# Bot ayarları ve Intent'ler
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # guild_members yerine güncel kullanım
+intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Sabit ID Tanımlamaları
 CATEGORY_ID = 1538271572295688262
 ROLE_ID = 1538271541781987449
-PACK_CHANNEL_ID = 1539359596555149353  # Arama paneli kanalı
-WELCOME_CHANNEL_ID = 1538271609419210835  # Gelen-Giden Kanalı
+PACK_CHANNEL_ID = 1539359596555149353
+WELCOME_CHANNEL_ID = 1538271609419210835
 
 # Pack Veritabanı
 PACK_DATABASE = {
@@ -144,7 +144,7 @@ PACK_DATABASE = {
 }
 
 
-# --- INTERACTIVE VIEWS (Butonlar ve Menüler) ---
+# --- INTERACTIVE VIEWS ---
 
 
 class PackCategorySelect(discord.ui.Select):
@@ -312,6 +312,7 @@ class TicketButtons(discord.ui.View):
     await self.create_ticket(interaction)
 
   async def create_ticket(self, interaction: discord.Interaction):
+    # Zaman aşımı hatasını önlemek için önce defer kullanıyoruz
     await interaction.response.send_message(
         "Destek talebin oluşturuluyor, lütfen bekle...", ephemeral=True
     )
@@ -421,7 +422,6 @@ async def on_member_join(member: discord.Member):
     return
 
   try:
-    # Canvas ile karşılama kartı
     background = easy_pil.Editor(
         easy_pil.Canvas(700, 350, color="#1e1f22")
     )
@@ -469,6 +469,9 @@ async def on_member_join(member: discord.Member):
 )
 @app_commands.default_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
+  # Timeout (Uygulama yanıt vermedi) hatasını önlemek için önce defer uyguluyoruz
+  await interaction.response.defer(ephemeral=True)
+
   embed = discord.Embed(
       color=0x2F3136,
       title="🎫 Vlandia Pack | Destek & İletişim",
@@ -486,10 +489,10 @@ async def ticket_kur(interaction: discord.Interaction):
   )
   embed.set_timestamp()
 
-  await interaction.response.send_message(
+  await interaction.channel.send(embed=embed, view=TicketButtons())
+  await interaction.followup.send(
       "Ticket paneli başarıyla kuruldu! 👍", ephemeral=True
   )
-  await interaction.channel.send(embed=embed, view=TicketButtons())
 
 
 @bot.tree.command(
@@ -500,9 +503,11 @@ async def ticket_kur(interaction: discord.Interaction):
 )
 @app_commands.default_permissions(administrator=True)
 async def pack_paneli_gonder(interaction: discord.Interaction):
+  await interaction.response.defer(ephemeral=True)
+
   target_channel = interaction.guild.get_channel(PACK_CHANNEL_ID)
   if not target_channel:
-    return await interaction.response.send_message(
+    return await interaction.followup.send(
         "Belirtilen ID'ye sahip kanal bulunamadı!", ephemeral=True
     )
 
@@ -547,7 +552,7 @@ async def pack_paneli_gonder(interaction: discord.Interaction):
       )
 
   await target_channel.send(embed=embed, view=OpenPackButton())
-  await interaction.response.send_message(
+  await interaction.followup.send(
       f"Pack arama paneli başarıyla <#{PACK_CHANNEL_ID}> kanalına gönderildi! 🚀",
       ephemeral=True,
   )
@@ -672,7 +677,6 @@ async def cekilis(interaction: discord.Interaction):
 
       await asyncio.sleep(ms_time / 1000)
 
-      # Çekiliş Bitişi
       for child in view.children:
         child.disabled = True
       await msg.edit(view=view)

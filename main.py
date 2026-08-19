@@ -7,7 +7,7 @@ from io import BytesIO
 import discord
 from discord import app_commands
 from discord.ext import commands
-from dotenv import load-dotenv
+from dotenv import load_dotenv  # Hatalı tire (_) ile düzeltildi
 import easy_pil  # Resim/Canvas işlemleri için
 from flask import Flask
 
@@ -717,7 +717,7 @@ async def cekilis(interaction: discord.Interaction):
   await interaction.response.send_modal(GiveawayModal())
 
 
-# Flask sunucusunu arka planda thread ile başlat (Render 7/24 aktif kalması için)
+# Flask sunucusunu arka planda thread ile başlat
 import threading
 
 threading.Thread(target=run_flask).start()

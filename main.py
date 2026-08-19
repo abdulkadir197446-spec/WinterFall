@@ -1,722 +1,726 @@
-import os
-import threading
 import asyncio
-import io
-import re
+import os
 import random
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
+from io import BytesIO
 import discord
 from discord import app_commands
 from discord.ext import commands
+from dotenv import load-dotenv
+import easy_pil  # Resim/Canvas işlemleri için
 from flask import Flask
-from easy_pil import Editor, Canvas, Font
 
-# --- MİNİ FLASK SUNUCUSU (Render Port Uyarısını Çözmek İçin) ---
-app = Flask(__name__)
+# .env dosyasındaki token ve ayarları yükle
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Render'da 7/24 aktif tutmak için mini Flask sunucusu
+app = Flask("")
 
 
 @app.route("/")
 def home():
-  return "Vlandia Pro Bot aktif ve çalışıyor! 🚀"
+  return "Vlandia Pro Bot Aktif ve Çalışıyor!"
 
 
 def run_flask():
-  port = int(os.environ.get("PORT", 8080))
-  app.run(host="0.0.0.0", port=port)
+  app.run(host="0.0.0.0", port=8080)
 
 
-# --- BOT TANIMLAMALARI ---
-intents = discord.Intents.all()
+# Bot ayarları ve Intent'ler
+intents = discord.Intents.default()
+intents.guilds = True
+intents.guild_messages = True
+intents.message_content = True
+intents.guild_members = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ID Tanımlamaları
-TICKET_CHANNEL_ID = 1538271588254875740  # Komutun atılacağı kanal ID'si
-TICKET_CATEGORY_ID = 1538271572295688262  # Ticket'ların açılacağı kategori ID'si
-STAFF_ROLE_ID = 1538271541781987449  # Etiketlenecek Yetkili Rol ID'si
-LOG_CHANNEL_ID = 1538982916087095296  # Kuş uçsa haber alacağımız Log Kanalı ID'si
-WELCOME_CHANNEL_ID = 1538271609419210835  # Gelen-Giden Kart Kanalı ID'si
+# Sabit ID Tanımlamaları
+CATEGORY_ID = 1538271572295688262
+ROLE_ID = 1538271541781987449
+PACK_CHANNEL_ID = 1539359596555149353  # Arama paneli kanalı
+WELCOME_CHANNEL_ID = 1538271609419210835  # Gelen-Giden Kanalı
+
+# Pack Veritabanı
+PACK_DATABASE = {
+    "smp": [
+        {"name": "legolasxwanderone", "channelId": "1539279470064697394"},
+        {"name": "arap-kone", "channelId": "1539279225234915498"},
+        {"name": "arapkone-blue", "channelId": "1539279262136270959"},
+        {"name": "kovadary-pvp", "channelId": "1539279371473264660"},
+        {"name": "rıbıtık-pack", "channelId": "1539279388221112380"},
+        {"name": "smp-pack", "channelId": "1539279403098579044"},
+        {"name": "vanilla-pack", "channelId": "1539279410388144171"},
+        {"name": "weembu-pack", "channelId": "1539279417916915742"},
+        {"name": "wisquismaslazy-pack", "channelId": "1539279425181454366"},
+        {"name": "wild-pack", "channelId": "1539279432999764050"},
+        {"name": "ege4093-pack", "channelId": "1539279450926219345"},
+        {"name": "head-pvp", "channelId": "1539279193454682213"},
+        {"name": "cxkn-pack", "channelId": "1539279501660397578"},
+        {"name": "faeroht-smp", "channelId": "1539279518890721361"},
+        {"name": "field-smp", "channelId": "1539279535839780964"},
+        {"name": "rewia-pack", "channelId": "1539279560300826751"},
+        {"name": "unverion-pack", "channelId": "1539279580354060378"},
+        {"name": "1rilly-private", "channelId": "1539279595801546912"},
+        {"name": "ronnia-pack", "channelId": "1539279615003074750"},
+        {"name": "zyan-pack", "channelId": "1539279662302240929"},
+        {"name": "sharpnes-500k", "channelId": "1539279640097460235"},
+        {"name": "spawnplayer-shield-edit", "channelId": "1539279683701571717"},
+        {"name": "dark-smp-max", "channelId": "1539279723929280662"},
+        {"name": "bnuy", "channelId": "1539279741876441230"},
+        {"name": "mehmetalemdar", "channelId": "1539279759312162887"},
+        {"name": "ancientivar-pack", "channelId": "1539279928531623958"},
+        {"name": "digiwaitdlv", "channelId": "1539279775355379842"},
+        {"name": "vanilla-edit", "channelId": "1539279793873485896"},
+        {"name": "tester-pack", "channelId": "1539279811367665805"},
+        {"name": "lvhs-pack", "channelId": "1539279833245421750"},
+        {"name": "swightv3-pack", "channelId": "1539279856787787937"},
+        {"name": "moonq-pack", "channelId": "1539279882209722468"},
+        {"name": "drpuuusmp-pack", "channelId": "1539279912677019658"},
+        {"name": "852gang-pack", "channelId": "1539279978422870067"},
+        {"name": "default-pack", "channelId": "1539280010458697759"},
+        {"name": "jokingoverlay-pack", "channelId": "1539280026334273637"},
+        {"name": "mergenisthebest-pack", "channelId": "1539279896512299151"},
+        {"name": "whyloser77-pack", "channelId": "1539280043522662501"},
+        {"name": "tungtungsahur-pack", "channelId": "1539280056042389585"},
+        {"name": "theosbarebones-pack", "channelId": "1539354661092462662"},
+        {"name": "shazamsmp-pack", "channelId": "1539354682143674389"},
+        {"name": "wlenzyx-pack", "channelId": "1539354698925215884"},
+        {"name": "cl1ein-pack", "channelId": "1539354596726673468"},
+        {"name": "marloww-pack", "channelId": "1539414313461219398"},
+    ],
+    "crystal": [
+        {"name": "shadow-16x-pack", "channelId": "1539341555335434260"},
+        {"name": "nymues-lavendar", "channelId": "1539349175320322169"},
+        {"name": "bloodyzip", "channelId": "1539349198611423313"},
+        {"name": "vape", "channelId": "1539349219259846697"},
+        {"name": "ghost", "channelId": "1539349271781056573"},
+        {"name": "hurricane-vanilla", "channelId": "1539349290067959858"},
+        {"name": "jjxf-matte", "channelId": "1539349322204848238"},
+        {"name": "purplfault", "channelId": "1539349366589100095"},
+        {"name": "green-v-v2", "channelId": "1539349877039824956"},
+        {"name": "marlowvplusaqua", "channelId": "1539349906332852254"},
+    ],
+    "nethpot": [
+        {"name": "xkaru-pack", "channelId": "1539353474716926033"},
+        {"name": "ckl_5llluuriisfl_800dl_packck", "channelId": "1539353521902587994"},
+        {"name": "mqgic_v1", "channelId": "1539353536369004605"},
+        {"name": "5d_christmas2b", "channelId": "1539353549618675873"},
+        {"name": "blackbyjack", "channelId": "1539353563518603387"},
+        {"name": "rea4per", "channelId": "1539353576261025802"},
+        {"name": "espana", "channelId": "1539353589804310589"},
+        {"name": "midnight-16x", "channelId": "1539353601284251779"},
+        {"name": "pink", "channelId": "1539353617105027072"},
+        {"name": "darkned_v2", "channelId": "1539353633785774221"},
+        {"name": "creatorpack-118-v122", "channelId": "1539353649808023662"},
+        {"name": "mata_private", "channelId": "1539353661652598874"},
+        {"name": "phonk", "channelId": "1539353674910797884"},
+        {"name": "1ruby", "channelId": "1539353688726962346"},
+        {"name": "nacho-edit", "channelId": "1539353711879520256"},
+        {"name": "lluris_aimbot_pack", "channelId": "1539353725397762120"},
+        {"name": "miracle_32x", "channelId": "1539353738358034523"},
+        {"name": "mardow-pack", "channelId": "1539353752002232441"},
+        {"name": "xdxd", "channelId": "1539353804972236840"},
+        {"name": "exe-pack", "channelId": "1539353819622936649"},
+    ],
+    "mace": [
+        {"name": "_baseballbeans_3d_mace_pack", "channelId": "1539354804885913650"},
+        {"name": "manepeare-scythe-mace", "channelId": "1539354922812965006"},
+        {"name": "macepvp2", "channelId": "1539354938117718037"},
+    ],
+    "bedwars": [
+        {"name": "purgatory_32", "channelId": "1539355817571127336"},
+        {"name": "cryogenik_5b16x5d", "channelId": "1539355852920586260"},
+        {"name": "whut_5b16x5d", "channelId": "1539355865981911160"},
+        {"name": "bglaze_16x", "channelId": "1539355879000899584"},
+        {"name": "ryuzoexe_5b32x5d", "channelId": "1539355892083073136"},
+    ],
+    "axe": [
+        {"name": "lcolder", "channelId": "1539357028202324048"},
+        {"name": "glory", "channelId": "1539357063048597575"},
+        {"name": "sacrifice", "channelId": "1539357078093697144"},
+        {"name": "doly_default", "channelId": "1539357090554839050"},
+    ],
+}
 
 
-# --- YARDIMCI LOG FONKSİYONU ---
-async def send_log(guild: discord.Guild, embed: discord.Embed):
-  log_channel = guild.get_channel(LOG_CHANNEL_ID)
-  if log_channel:
-    try:
-      await log_channel.send(embed=embed)
-    except Exception as e:
-      print(f"Log gönderilemedi: {e}")
+# --- INTERACTIVE VIEWS (Butonlar ve Menüler) ---
 
 
-# --- VLANDİA TEMALI GİRİŞ/ÇIKIŞ KART OLUŞTURUCU ---
-async def send_welcome_card(member: discord.Member, action_type: str):
-  channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
-  if not channel:
-    return
+class PackCategorySelect(discord.ui.Select):
 
-  try:
-    background = Canvas(900, 500, color=(20, 22, 25))
-    editor = Editor(background)
-    editor.rectangle((20, 20, 860, 460), outline=(255, 140, 0), stroke_width=3)
-
-    user_avatar_image = (
-        await member.avatar.read()
-        if member.avatar
-        else await member.default_avatar.read()
+  def __init__(self):
+    options = [
+        discord.SelectOption(
+            label="SMP Packleri",
+            description="SMP packleri arasında arama yap",
+            value="smp",
+            emoji="🛡️",
+        ),
+        discord.SelectOption(
+            label="Crystal Packleri",
+            description="Crystal packleri arasında arama yap",
+            value="crystal",
+            emoji="💎",
+        ),
+        discord.SelectOption(
+            label="Nethpot Packleri",
+            description="Nethpot packleri arasında arama yap",
+            value="nethpot",
+            emoji="🧪",
+        ),
+        discord.SelectOption(
+            label="Mace Packleri",
+            description="Mace packleri arasında arama yap",
+            value="mace",
+            emoji="🔨",
+        ),
+        discord.SelectOption(
+            label="Bedwars Packleri",
+            description="Bedwars packleri arasında arama yap",
+            value="bedwars",
+            emoji="🛏️",
+        ),
+        discord.SelectOption(
+            label="Axe Packleri",
+            description="Axe packleri arasında arama yap",
+            value="axe",
+            emoji="🪓",
+        ),
+    ]
+    super().__init__(
+        placeholder="Görmek istediğin pack kategorisini seç...",
+        min_values=1,
+        max_values=1,
+        custom_id="pack_category_select",
     )
-    avatar_image = Editor(user_avatar_image).resize((160, 160)).circle_image()
-    editor.paste(avatar_image, (370, 110))
 
-    title_font = Font.load_default(size=40)
-    name_font = Font.load_default(size=35)
-
-    title_text = (
-        f"SENİNLE BERABER {member.guild.member_count} KİŞİ OLDUK!"
-        if action_type == "join"
-        else f"GÖRÜŞÜRÜZ {member.name.upper()}"
-    )
-    editor.text(
-        (450, 50),
-        title_text,
-        color=(255, 255, 255),
-        font=title_font,
-        align="center",
-    )
-    editor.text(
-        (450, 340),
-        member.name.upper(),
-        color=(255, 140, 0),
-        font=name_font,
-        align="center",
-    )
-
-    file = discord.File(fp=editor.image_bytes, filename="vlandia_card.png")
-    message_content = (
-        f"{member.mention} Hoşgeldin! Senle beraber **{member.guild.member_count}**"
-        f" kişi olduk."
-        if action_type == "join"
-        else f"**{member.name}** aramızdan ayrıldı."
-    )
-    await channel.send(content=message_content, file=file)
-
-  except Exception as e:
-    print(f"Giriş/Çıkış kartı oluşturulurken hata: {e}")
-
-
-# --- ÇEKİLİŞ SİSTEMİ (SÜRE ÇÖZÜCÜ VE BUTON) ---
-def parse_time(time_str: str) -> int:
-  time_str = time_str.strip().lower()
-  match = re.match(r"^(\d+)([smhd])$", time_str)
-  if not match:
-    return 0
-  amount, unit = int(match.group(1)), match.group(2)
-  if unit == "s":
-    return amount
-  elif unit == "m":
-    return amount * 60
-  elif unit == "h":
-    return amount * 3600
-  elif unit == "d":
-    return amount * 86400
-  return 0
-
-
-class GiveawayView(discord.ui.View):
-
-  def __init__(self, duration_seconds: int, winners_count: int, prize: str, description: str, host: discord.Member):
-    super().__init__(timeout=None)
-    self.participants = set()
-    self.duration_seconds = duration_seconds
-    self.winners_count = winners_count
-    self.prize = prize
-    self.description = description
-    self.host = host
-    self.ended = False
-
-  @discord.ui.button(
-      label="🎉 Katıl",
-      style=discord.ButtonStyle.primary,
-      custom_id="giveaway_join_btn",
-  )
-  async def join_button(
-      self, interaction: discord.Interaction, button: discord.ui.Button
-  ):
-    if self.ended:
-      await interaction.response.send_message(
-          "❌ Bu çekiliş sona ermiştir!", ephemeral=True
-      )
-      return
-
-    if interaction.user.id in self.participants:
-      self.participants.remove(interaction.user.id)
-      await interaction.response.send_message(
-          "❌ Çekilişten katılımınız kaldırıldı!", ephemeral=True
-      )
-    else:
-      self.participants.add(interaction.user.id)
-      await interaction.response.send_message(
-          "✅ Çekilişe başarıyla katıldın!", ephemeral=True
-      )
-
-    button.label = f"🎉 Katıl ({len(self.participants)})"
-    await interaction.message.edit(view=self)
-
-
-# --- ÇEKİLİŞ MODAL (FORM) PANELİ ---
-class GiveawayModal(discord.ui.Modal, title="🎉 Çekiliş Oluştur"):
-  duration = discord.ui.TextInput(
-      label="Süre",
-      placeholder="Örn: 10m (10 dakika), 1h (1 saat), 1d (1 gün)",
-      required=True,
-      max_length=10,
-  )
-
-  winners = discord.ui.TextInput(
-      label="Kazanan Sayısı",
-      placeholder="Örn: 1",
-      default="1",
-      required=True,
-      max_length=3,
-  )
-
-  prize = discord.ui.TextInput(
-      label="Ödül",
-      placeholder="Verilecek ödül nedir?",
-      required=True,
-      max_length=100,
-  )
-
-  description = discord.ui.TextInput(
-      label="Açıklama",
-      placeholder="Çekiliş şartları veya detayları buraya...",
-      style=discord.TextStyle.paragraph,
-      required=False,
-      max_length=500,
-  )
-
-  async def on_submit(self, interaction: discord.Interaction):
-    sec = parse_time(self.duration.value)
-    if sec <= 0:
-      await interaction.response.send_message(
-          "❌ Geçersiz süre formatı! Örn: `10m`, `1h`, `1d` kullanmalısın.",
+  async def callback(self, interaction: discord.Interaction):
+    if interaction.channel_id != PACK_CHANNEL_ID:
+      return await interaction.response.send_message(
+          f"Bu özellik sadece <#{PACK_CHANNEL_ID}> kanalında kullanılabilir!",
           ephemeral=True,
       )
-      return
 
-    try:
-      w_count = int(self.winners.value)
-      if w_count < 1:
-        raise ValueError()
-    except ValueError:
-      await interaction.response.send_message(
-          "❌ Kazanan sayısı pozitif bir sayı olmalıdır!", ephemeral=True
-      )
-      return
-
-    end_time = datetime.now() + timedelta(seconds=sec)
-    timestamp = int(end_time.timestamp())
-
-    embed = discord.Embed(
-        title=self.prize.value,
-        description=(
-            f"{self.description.value}\n\n"
-            if self.description.value
-            else ""
-        )
-        + f"⏳ Bitiş: <t:{timestamp}:R> (<t:{timestamp}:F>)\n"
-        f"👑 Düzenleyen: {interaction.user.mention}\n"
-        f"🎟️ Katılımcı: **0**\n"
-        f"🏆 Kazanan Sayısı: **{w_count}**",
-        color=discord.Color.from_rgb(255, 140, 0),
-    )
-    embed.set_author(name="Vlandia Çekiliş Sistemi", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
-
-    view = GiveawayView(sec, w_count, self.prize.value, self.description.value, interaction.user)
-    
-    await interaction.response.send_message(
-        "✨ Çekiliş başarıyla başlatıldı!", ephemeral=True
-    )
-    msg = await interaction.channel.send(embed=embed, view=view)
-
-    async def finish_giveaway():
-      await asyncio.sleep(sec)
-      view.ended = True
-      for child in view.children:
-        child.disabled = True
-      
-      try:
-        await msg.edit(view=view)
-      except Exception:
-        pass
-
-      if len(view.participants) > 0:
-        actual_winners_count = min(w_count, len(view.participants))
-        winner_ids = random.sample(list(view.participants), actual_winners_count)
-        winner_mentions = ", ".join([f"<@{uid}>" for uid in winner_ids])
-        
-        result_embed = discord.Embed(
-            title=f"🎉 Çekiliş Sonuçlandı: {self.prize.value}",
-            description=f"🏆 **Kazananlar:** {winner_mentions}\n👑 **Düzenleyen:** {interaction.user.mention}",
-            color=discord.Color.green(),
-        )
-        await interaction.channel.send(content=winner_mentions, embed=result_embed)
-      else:
-        result_embed = discord.Embed(
-            title=f"🎉 Çekiliş Sonuçlandı: {self.prize.value}",
-            description="❌ Yeterli katılım olmadığı için kazanan seçilemedi.",
-            color=discord.Color.red(),
-        )
-        await interaction.channel.send(embed=result_embed)
-
-    bot.loop.create_task(finish_giveaway())
+    selected_category = self.values[0]
+    modal = PackSearchModal(selected_category)
+    await interaction.response.send_modal(modal)
 
 
-# --- SLASH KOMUTU: /ÇEKİLİŞ ---
-@bot.tree.command(
-    name="çekiliş",
-    description="Vlandia temalı Türkçe çekiliş paneli açar.",
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def çekiliş(interaction: discord.Interaction):
-  await interaction.response.send_modal(GiveawayModal())
-
-
-# --- TICKET KAPATMA BUTONU ---
-class TicketCloseView(discord.ui.View):
+class PackCategoryView(discord.ui.View):
 
   def __init__(self):
     super().__init__(timeout=None)
+    self.add_item(PackCategorySelect())
 
-  @discord.ui.button(
-      label="Ticket'ı Kapat",
-      style=discord.ButtonStyle.danger,
-      emoji="🔒",
-      custom_id="ticket_close",
-  )
-  async def close_button(
-      self, interaction: discord.Interaction, button: discord.ui.Button
-  ):
-    await interaction.response.send_message(
-        "🔒 Bu kanal 5 saniye içinde kapatılıyor...", ephemeral=False
+
+class PackSearchModal(discord.ui.Modal):
+
+  def __init__(self, category: str):
+    super().__init__(title="🔍 Pack Arama")
+    self.category = category
+
+    self.pack_query = discord.ui.TextInput(
+        label="Aradığın packin adı (veya bir kısmı)",
+        placeholder="Örn: lcolder, glory, sacrifice...",
+        style=discord.TextStyle.short,
+        required=False,
     )
-    await asyncio.sleep(5)
-    await interaction.channel.delete()
+    self.add_item(self.pack_query)
+
+  async def on_submit(self, interaction: discord.Interaction):
+    query = self.pack_query.value.lower().strip()
+    packs = PACK_DATABASE.get(self.category, [])
+
+    category_names = {
+        "smp": "🛡️ SMP",
+        "crystal": "💎 Crystal",
+        "nethpot": "🧪 Nethpot",
+        "mace": "🔨 Mace",
+        "bedwars": "🛏️ Bedwars",
+        "axe": "🪓 Axe",
+    }
+    cat_name = category_names.get(self.category, "Bilinmeyen")
+
+    filtered_packs = (
+        [p for p in packs if query in p["name"].lower()] if query else packs
+    )
+
+    result_text = f"📦 **{cat_name} Kategorisi**"
+    if query:
+      result_text += f' (Aranan: "{query}")'
+    result_text += f" - **{len(filtered_packs)} sonuç bulundu:**\n\n"
+
+    if filtered_packs:
+      lines = [
+          f"• `{p['name']}` ➡️ <#{p['channelId']}>" for p in filtered_packs
+      ]
+      result_text += "\n".join(lines)
+    else:
+      result_text += "Aradığın kriterlere uygun pack bulunamadı! ❌"
+
+    await interaction.response.send_message(result_text, ephemeral=True)
 
 
-# --- TICKET AÇMA BUTONLARI VE GÖRÜNÜMÜ ---
-class TicketView(discord.ui.View):
+class TicketButtons(discord.ui.View):
 
   def __init__(self):
     super().__init__(timeout=None)
 
   @discord.ui.button(
       label="Partnerlik",
-      style=discord.ButtonStyle.secondary,
+      style=discord.ButtonStyle.success,
       emoji="🤝",
       custom_id="ticket_partner",
   )
-  async def partner_button(
+  async def partner(
       self, interaction: discord.Interaction, button: discord.ui.Button
   ):
-    await self.create_ticket_channel(interaction, "Partnerlik")
+    await self.create_ticket(interaction)
 
   @discord.ui.button(
       label="Genel Destek",
       style=discord.ButtonStyle.primary,
-      emoji="🎫",
+      emoji="🎟️",
       custom_id="ticket_genel",
   )
-  async def genel_button(
+  async def genel(
       self, interaction: discord.Interaction, button: discord.ui.Button
   ):
-    await self.create_ticket_channel(interaction, "Genel Destek")
+    await self.create_ticket(interaction)
 
   @discord.ui.button(
       label="Pack Ekleme",
-      style=discord.ButtonStyle.primary,
+      style=discord.ButtonStyle.secondary,
       emoji="📦",
       custom_id="ticket_pack",
   )
-  async def pack_button(
+  async def pack(
       self, interaction: discord.Interaction, button: discord.ui.Button
   ):
-    await self.create_ticket_channel(interaction, "Pack Ekleme")
+    await self.create_ticket(interaction)
 
   @discord.ui.button(
       label="Yetkili Alım",
-      style=discord.ButtonStyle.secondary,
+      style=discord.ButtonStyle.danger,
       emoji="🤍",
       custom_id="ticket_yetkili",
   )
-  async def yetkili_button(
+  async def yetkili(
       self, interaction: discord.Interaction, button: discord.ui.Button
   ):
-    await self.create_ticket_channel(interaction, "Yetkili Alım")
+    await self.create_ticket(interaction)
 
-  async def create_ticket_channel(
-      self, interaction: discord.Interaction, category_type: str
-  ):
+  async def create_ticket(self, interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "Destek talebin oluşturuluyor, lütfen bekle...", ephemeral=True
+    )
     guild = interaction.guild
-    ticket_category = guild.get_channel(TICKET_CATEGORY_ID)
+    user = interaction.user
 
-    safe_name = "".join(
-        c for c in interaction.user.name if c.isalnum()
-    ).lower()
-    channel_name = f"ticket-{safe_name}"
-
-    existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
-    if existing_channel:
-      await interaction.response.send_message(
-          f"Zaten açık olan bir ticket kanalın bulunuyor: {existing_channel.mention}",
-          ephemeral=True,
-      )
-      return
-
-    staff_role = guild.get_role(STAFF_ROLE_ID)
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        interaction.user: discord.PermissionOverwrite(
-            read_messages=True, send_messages=True, attach_files=True
-        ),
-    }
-    if staff_role:
-      overwrites[staff_role] = discord.PermissionOverwrite(
-          read_messages=True, send_messages=True, attach_files=True
+    existing = discord.utils.get(
+        guild.text_channels, name=f"ticket-{user.name.lower()}"
+    )
+    if existing:
+      return await interaction.edit_original_response(
+          content=f"Zaten açık olan bir destek talebin bulunuyor: {existing}"
       )
 
-    ticket_channel = await guild.create_text_channel(
-        name=channel_name,
-        category=(
-            ticket_category
-            if isinstance(ticket_category, discord.CategoryChannel)
-            else None
-        ),
-        overwrites=overwrites,
-    )
+    try:
+      overwrites = {
+          guild.default_role:
+          discord.PermissionOverwrite(view_channel=False),
+          user:
+          discord.PermissionOverwrite(
+              view_channel=True,
+              send_messages=True,
+              read_message_history=True,
+          ),
+          guild.get_role(ROLE_ID):
+          discord.PermissionOverwrite(
+              view_channel=True,
+              send_messages=True,
+              read_message_history=True,
+          ),
+      }
+      category = guild.get_channel(CATEGORY_ID)
 
-    embed = discord.Embed(
-        title=f"Vlandia Pack | {category_type} Destek Talebi",
-        description=(
-            f"Hoş geldin {interaction.user.mention}! 🚀\n\n"
-            f"**{category_type}** ile ilgili talebin başarıyla alındı. Lütfen"
-            " sorununuzu veya talebinizi detaylı bir şekilde açıklayın,"
-            " yetkili ekibimiz en kısa sürede sizinle ilgilenecektir.\n\n"
-            "⚠️ *Gereksiz yere ticket açmak cezai işlem sebebi olabilir.*"
-        ),
-        color=discord.Color.from_rgb(43, 45, 49),
-    )
-    embed.set_author(
-        name="Vlandia Pro Bot • Güvenli Destek",
-        icon_url=guild.icon.url if guild.icon else None,
-    )
-    embed.set_footer(
-        text="Vlandia Pack © 2026",
-        icon_url=(
-            interaction.client.user.avatar.url
-            if interaction.client.user.avatar
-            else None
-        ),
-    )
+      ticket_channel = await guild.create_text_channel(
+          name=f"ticket-{user.name}",
+          category=category if isinstance(category, discord.CategoryChannel)
+          else None,
+          overwrites=overwrites,
+      )
 
-    role_ping = f"<@&{STAFF_ROLE_ID}>" if staff_role else "@everyone"
-    await ticket_channel.send(
-        content=f"{interaction.user.mention} | {role_ping}",
-        embed=embed,
-        view=TicketCloseView(),
-    )
+      embed = discord.Embed(
+          title="Destek Talebi Oluşturuldu",
+          description=(
+              f"Merhaba {user},"
+              " yetkililerimiz kısa süre içinde sizinle ilgilenecektir."
+          ),
+          color=0x5865F2,
+      )
+      close_view = TicketCloseView()
 
-    await interaction.response.send_message(
-        f"✅ Destek kanalın başarıyla oluşturuldu: {ticket_channel.mention}",
-        ephemeral=True,
-    )
+      await ticket_channel.send(
+          content=f"<@&{ROLE_ID}> | {user}",
+          embed=embed,
+          view=close_view,
+      )
+      await interaction.edit_original_response(
+          content=f"Destek talebin başarıyla oluşturuldu: {ticket_channel}"
+      )
+    except Exception as e:
+      print(e)
+      await interaction.edit_original_response(
+          content="Destek kanalı oluşturulurken bir hata oluştu!"
+      )
 
 
-# --- TICKET SLASH KOMUTU ---
-@bot.tree.command(
-    name="ticket_kur",
-    description="Harika görünümlü çoklu seçenekli ticket panelini kurar.",
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def ticket_kur(interaction: discord.Interaction):
-  if interaction.channel.id != TICKET_CHANNEL_ID:
-    await interaction.response.send_message(
-        "❌ Bu komut sadece **🎟️-𝐓𝐢𝐜𝐤𝐞𝐭** kanalında kullanılabilir!",
-        ephemeral=True,
-    )
-    return
+class TicketCloseView(discord.ui.View):
 
-  embed = discord.Embed(
-      title="Vlandia Pack | Destek & İletişim",
-      description=(
-          "Sunucumuzla ilgili her türlü soru, sorun, öneri veya işlemleriniz"
-          " için aşağıdaki butonları kullanarak bir destek talebi"
-          " oluşturabilirsiniz.\n\n"
-          "💎 **Kategoriler:**\n"
-          "• 🤝 **Partnerlik**\n"
-          "• 🎫 **Genel Destek**\n"
-          "• 📦 **Pack Ekleme**\n"
-          "• 🤍 **Yetkili Alım**\n\n"
-          "*Lütfen gereksiz yere ticket açmaktan kaçınınız.*"
-      ),
-      color=discord.Color.from_rgb(30, 31, 34),
+  def __init__(self):
+    super().__init__(timeout=None)
+
+  @discord.ui.button(
+      label="Talebi Kapat",
+      style=discord.ButtonStyle.danger,
+      emoji="🔒",
+      custom_id="ticket_close",
   )
-  embed.set_author(
-      name="Vlandia Pack Destek Sistemi",
-      icon_url=interaction.guild.icon.url if interaction.guild.icon else None,
-  )
-  embed.set_footer(
-      text="Powered by Ohrid & Vlandia Pro Bot",
-      icon_url=(
-          interaction.client.user.avatar.url
-          if interaction.client.user.avatar
-          else None
-      ),
-  )
-
-  await interaction.channel.send(embed=embed, view=TicketView())
-  await interaction.response.send_message(
-      "✨ Ticket Paneli bu kanalda başarıyla kuruldu!", ephemeral=True
-  )
-
-
-# ==========================================
-# 🦅 GİRİŞ / ÇIKIŞ VE LOG SİSTEMİ OLAYLARI
-# ==========================================
-
-@bot.event
-async def on_member_join(member):
-  await send_welcome_card(member, "join")
-
-  embed = discord.Embed(
-      title="📥 Sunucuya Biri Katıldı",
-      description=(
-          f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)\n**Hesap"
-          f" Kuruluş:** {member.created_at.strftime('%d-%m-%Y %H:%M:%S')}"
-      ),
-      color=discord.Color.green(),
-  )
-  embed.set_thumbnail(
-      url=member.avatar.url if member.avatar else member.default_avatar.url
-  )
-  embed.set_footer(text=f"Kullanıcı ID: {member.id}")
-  await send_log(member.guild, embed)
-
-
-@bot.event
-async def on_member_remove(member):
-  await send_welcome_card(member, "remove")
-
-  embed = discord.Embed(
-      title="📤 Sunucudan Biri Ayrıldı",
-      description=f"**İşlem Gören Üye:** {member.mention} (`{member.name}`)",
-      color=discord.Color.dark_red(),
-  )
-  embed.set_thumbnail(
-      url=member.avatar.url if member.avatar else member.default_avatar.url
-  )
-  embed.set_footer(text=f"Kullanıcı ID: {member.id}")
-  await send_log(member.guild, embed)
-
-
-@bot.event
-async def on_message_delete(message):
-  if message.author.bot or not message.guild:
-    return
-
-  deleter = "Bilinmiyor (Kendi silmiş olabilir)"
-  try:
-    async for entry in message.guild.audit_logs(
-        limit=1, action=discord.AuditLogAction.message_delete
-    ):
-      if (
-          entry.target
-          and entry.target.id == message.author.id
-          and (discord.utils.utcnow() - entry.created_at).total_seconds() < 5
-      ):
-        deleter = entry.user.mention
-        break
-  except Exception:
-    pass
-
-  embed = discord.Embed(
-      title="🗑️ Mesaj Silindi",
-      description=(
-          f"**Kanal:** {message.channel.mention}\n**Mesaj Sahibi:**"
-          f" {message.author.mention}\n**İşlemi Yapan (Silen):**"
-          f" {deleter}\n**Silinen İçerik:**\n```"
-          f"{message.content or 'İçerik yok (Fotoğraf/Embed)'}```"
-      ),
-      color=discord.Color.red(),
-  )
-  embed.set_footer(text=f"Kullanıcı ID: {message.author.id}")
-  await send_log(message.guild, embed)
-
-
-@bot.event
-async def on_message_edit(before, after):
-  if before.author.bot or not before.guild or before.content == after.content:
-    return
-  embed = discord.Embed(
-      title="✏️ Mesaj Düzenlendi",
-      description=(
-          f"**Kanal:** {before.channel.mention}\n**İşlem Yapan (Kullanıcı):**"
-          f" {before.author.mention}\n\n**Eski Hali:**\n```"
-          f"{before.content}```\n**Yeni Hali:**\n```{after.content}```"
-      ),
-      color=discord.Color.orange(),
-  )
-  embed.set_footer(text=f"Kullanıcı ID: {before.author.id}")
-  await send_log(before.guild, embed)
-
-
-@bot.event
-async def on_guild_channel_create(channel):
-  creator = "Bilinmiyor"
-  try:
-    async for entry in channel.guild.audit_logs(
-        limit=1, action=discord.AuditLogAction.channel_create
-    ):
-      if entry.target.id == channel.id:
-        creator = entry.user.mention
-        break
-  except Exception:
-    pass
-
-  embed = discord.Embed(
-      title="➕ Kanal Oluşturuldu",
-      description=(
-          f"**Kanal Adı:** `{channel.name}`\n**Tür:**"
-          f" `{channel.type}`\n**İşlemi Yapan:** {creator}"
-      ),
-      color=discord.Color.blue(),
-  )
-  await send_log(channel.guild, embed)
-
-
-@bot.event
-async def on_guild_channel_delete(channel):
-  deleter = "Bilinmiyor"
-  try:
-    async for entry in channel.guild.audit_logs(
-        limit=1, action=discord.AuditLogAction.channel_delete
-    ):
-      if entry.target.id == channel.id:
-        deleter = entry.user.mention
-        break
-  except Exception:
-    pass
-
-  embed = discord.Embed(
-      title="➖ Kanal Silindi",
-      description=(
-          f"**Kanal Adı:** `{channel.name}`\n**İşlemi Yapan:** {deleter}"
-      ),
-      color=discord.Color.dark_blue(),
-  )
-  await send_log(channel.guild, embed)
-
-
-@bot.event
-async def on_guild_role_create(role):
-  creator = "Bilinmiyor"
-  try:
-    async for entry in role.guild.audit_logs(
-        limit=1, action=discord.AuditLogAction.role_create
-    ):
-      if entry.target.id == role.id:
-        creator = entry.user.mention
-        break
-  except Exception:
-    pass
-
-  embed = discord.Embed(
-      title="✨ Rol Oluşturuldu",
-      description=f"**Rol Adı:** `{role.name}`\n**İşlemi Yapan:** {creator}",
-      color=discord.Color.gold(),
-  )
-  await send_log(role.guild, embed)
-
-
-@bot.event
-async def on_guild_role_delete(role):
-  deleter = "Bilinmiyor"
-  try:
-    async for entry in role.guild.audit_logs(
-        limit=1, action=discord.AuditLogAction.role_delete
-    ):
-      if entry.target.id == role.id:
-        deleter = entry.user.mention
-        break
-  except Exception:
-    pass
-
-  embed = discord.Embed(
-      title="❌ Rol Silindi",
-      description=f"**Rol Adı:** `{role.name}`\n**İşlemi Yapan:** {deleter}",
-      color=discord.Color.dark_gold(),
-  )
-  await send_log(role.guild, embed)
-
-
-@bot.event
-async def on_voice_state_update(member, before, after):
-  if member.bot:
-    return
-
-  if before.channel is None and after.channel is not None:
-    embed = discord.Embed(
-        title="🔊 Ses Kanalına Katıldı",
-        description=(
-            f"**Üye (İşlem Gören):** {member.mention}\n**Kanal:**"
-            f" **{after.channel.name}**"
-        ),
-        color=discord.Color.teal(),
-    )
-    await send_log(member.guild, embed)
-  elif before.channel is not None and after.channel is None:
-    embed = discord.Embed(
-        title="🔇 Ses Kanalından Ayrıldı",
-        description=(
-            f"**Üye (İşlem Gören):** {member.mention}\n**Kanal:**"
-            f" **{before.channel.name}**"
-        ),
-        color=discord.Color.dark_teal(),
-    )
-    await send_log(member.guild, embed)
-  elif (
-      before.channel != after.channel
-      and before.channel is not None
-      and after.channel is not None
+  async def close(
+      self, interaction: discord.Interaction, button: discord.ui.Button
   ):
-    embed = discord.Embed(
-        title="🔀 Ses Kanalı Değiştirdi",
-        description=(
-            f"**Üye (İşlem Gören):** {member.mention}\n**Eski Kanal:**"
-            f" **{before.channel.name}** ➡️ **Yeni Kanal:**"
-            f" **{after.channel.name}**"
-        ),
-        color=discord.Color.blurple(),
+    await interaction.response.send_message(
+        "Destek talebi 5 saniye içinde kapatılıyor..."
     )
-    await send_log(member.guild, embed)
+    await asyncio.sleep(5)
+    try:
+      await interaction.channel.delete()
+    except:
+      pass
 
 
-# --- ON READY ---
+# --- BOT EVENTS ---
+
+
 @bot.event
 async def on_ready():
-  bot.add_view(TicketView())
-  bot.add_view(TicketCloseView())
-  print(
-      f"{bot.user} olarak giriş yapıldı, Türkçe çekiliş ve Vlandia sistemleri"
-      " aktif!"
-  )
+  print(f"Bot başarıyla giriş yaptı: {bot.user.tag}")
   try:
     synced = await bot.tree.sync()
-    print(f"Synced {len(synced)} command(s).")
+    print(f"{len(synced)} adet slash komutu senkronize edildi.")
   except Exception as e:
     print(e)
 
 
-# --- ANA ÇALIŞTIRMA BLOĞU ---
-if __name__ == "__main__":
-  flask_thread = threading.Thread(target=run_flask)
-  flask_thread.start()
-  bot.run(os.environ.get("DISCORD_TOKEN"))
+@bot.event
+async def on_member_join(member: discord.Member):
+  channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
+  if not channel:
+    return
+
+  try:
+    # Canvas ile karşılama kartı
+    background = easy_pil.Editor(
+        easy_pil.Canvas(700, 350, color="#1e1f22")
+    )
+    background.rectangle(
+        position=(10, 10),
+        width=680,
+        height=330,
+        outline="#f0a500",
+        stroke_width=6,
+    )
+
+    profile_image = await easy_pil.load_image_async(
+        str(member.display_avatar.url)
+    )
+    profile = easy_pil.Editor(profile_image).resize((150, 150)).circle()
+    background.paste(profile, (275, 60))
+    background.ellipse(
+        position=(275, 60),
+        width=150,
+        height=150,
+        outline="#5865F2",
+        stroke_width=5,
+    )
+
+    file = discord.File(
+        fp=BytesIO(background.image_bytes), filename="vlandia-welcome.png"
+    )
+    await channel.send(
+        content=(
+            f"<@{member.id}> Hoşgeldin brom ! senle beraber"
+            f" **{member.guild.memberCount}** kişi olduk."
+        ),
+        file=file,
+    )
+  except Exception as e:
+    print(f"Karşılama resmi oluşturulurken hata oluştu: {e}")
+
+
+# --- SLASH KOMUTLARI ---
+
+
+@bot.tree.command(
+    name="vlandia-ticket-kur",
+    description="Vlandia Pack havalı destek panelini bu kanala kurar.",
+)
+@app_commands.default_permissions(administrator=True)
+async def ticket_kur(interaction: discord.Interaction):
+  embed = discord.Embed(
+      color=0x2F3136,
+      title="🎫 Vlandia Pack | Destek & İletişim",
+      description=(
+          "Sunucumuzla ilgili her türlü soru, sorun, öneri veya işlemleriniz"
+          " için aşağıdaki butonları kullanarak bir destek talebi"
+          " oluşturabilirsiniz.\n\n💎 **Kategoriler:**\n🤝"
+          " **Partnerlik**\n🎟️ **Genel Destek**\n📦 **Pack"
+          " Ekleme**\n🤍 **Yetkili Alım**"
+      ),
+  )
+  embed.set_footer(
+      text="Powered by Ohrid & Vlandia Pro Bot",
+      icon_url=interaction.guild.icon.url if interaction.guild.icon else None,
+  )
+  embed.set_timestamp()
+
+  await interaction.response.send_message(
+      "Ticket paneli başarıyla kuruldu! 👍", ephemeral=True
+  )
+  await interaction.channel.send(embed=embed, view=TicketButtons())
+
+
+@bot.tree.command(
+    name="pack-paneli-gonder",
+    description=(
+        "Pack arama ve kategori panelini doğrudan ilgili kanala gönderir."
+    ),
+)
+@app_commands.default_permissions(administrator=True)
+async def pack_paneli_gonder(interaction: discord.Interaction):
+  target_channel = interaction.guild.get_channel(PACK_CHANNEL_ID)
+  if not target_channel:
+    return await interaction.response.send_message(
+        "Belirtilen ID'ye sahip kanal bulunamadı!", ephemeral=True
+    )
+
+  embed = discord.Embed(
+      color=0x5865F2,
+      title="📦 Vlandia Pack Arama & Keşif Merkezi",
+      description=(
+          "Aradığın packi nokta atışı bulmak için aşağıdaki **\"Pack"
+          " Kategorisi Seç\"** butonuna tıkla, kategorini seç ve aradığın"
+          " ismi yaz!\n\n🔍 **Kategoriler:**\n• 🛡️ SMP Packleri\n• 💎 Crystal"
+          " Packleri\n• 🧪 Nethpot Packleri\n• 🔨 Mace Packleri\n• 🛏️ Bedwars"
+          " Packleri\n• 🪓 Axe Packleri"
+      ),
+  )
+  embed.set_footer(text="Vlandia Pro Bot • Kolay Pack Sistemi")
+  embed.set_timestamp()
+
+  class OpenPackButton(discord.ui.View):
+
+    def __init__(self):
+      super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Pack Kategorisi Seç",
+        style=discord.ButtonStyle.primary,
+        emoji="🔍",
+        custom_id="open_pack_menu",
+    )
+    async def open_menu(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+      if interaction.channel_id != PACK_CHANNEL_ID:
+        return await interaction.response.send_message(
+            f"Bu özellik sadece <#{PACK_CHANNEL_ID}> kanalında kullanılabilir!",
+            ephemeral=True,
+        )
+      view = PackCategoryView()
+      await interaction.response.send_message(
+          "Önce incelemek istediğin kategoriyi seç:",
+          view=view,
+          ephemeral=True,
+      )
+
+  await target_channel.send(embed=embed, view=OpenPackButton())
+  await interaction.response.send_message(
+      f"Pack arama paneli başarıyla <#{PACK_CHANNEL_ID}> kanalına gönderildi! 🚀",
+      ephemeral=True,
+  )
+
+
+@bot.tree.command(
+    name="çekiliş", description="Havalı ve profesyonel bir çekiliş paneli açar."
+)
+@app_commands.default_permissions(administrator=True)
+async def cekilis(interaction: discord.Interaction):
+
+  class GiveawayModal(discord.ui.Modal, title="🎉 Vlandia | Çekiliş Oluşturucu"):
+    duration = discord.ui.TextInput(
+        label="Süre (Örn: 1m, 1h, 1d)",
+        placeholder="10m, 1h vb.",
+        style=discord.TextStyle.short,
+        required=True,
+    )
+    winners = discord.ui.TextInput(
+        label="Kazanan Sayısı",
+        placeholder="1",
+        style=discord.TextStyle.short,
+        required=True,
+    )
+    prize = discord.ui.TextInput(
+        label="Ödül",
+        placeholder="Örn: 1 Dia Kit / VIP",
+        style=discord.TextStyle.short,
+        required=True,
+    )
+    description = discord.ui.TextInput(
+        label="Açıklama / Şartlar",
+        placeholder="Örn: 2 invite yapmanız yeterli...",
+        style=discord.TextStyle.paragraph,
+        required=False,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+      dur_str = self.duration.value
+      win_count = int(self.winners.value) if self.winners.value.isdigit() else 1
+      prz = self.prize.value
+      desc = self.description.value or "Ek şart belirtilmedi."
+
+      ms_time = 10 * 60 * 1000
+      if dur_str.endswith("m"):
+        ms_time = int(dur_str[:-1]) * 60 * 1000
+      elif dur_str.endswith("h"):
+        ms_time = int(dur_str[:-1]) * 60 * 60 * 1000
+      elif dur_str.endswith("d"):
+        ms_time = int(dur_str[:-1]) * 24 * 60 * 60 * 1000
+
+      ends_at = int(time.time() * 1000) + ms_time
+      unix_ts = int(ends_at / 1000)
+
+      await interaction.response.send_message(
+          "Çekiliş başarıyla başlatıldı! 🎉", ephemeral=True
+      )
+
+      embed = discord.Embed(
+          color=0x5865F2,
+          title=f"🎉 {prz}",
+          description=(
+              f"{desc}\n\n**Düzenleyen:**"
+              f" {interaction.user}\n**Kazanan:**"
+              f" {win_count}\n**Bitiş:** <t:{unix_ts}:F> (<t:{unix_ts}:R>)"
+          ),
+      )
+
+      participants = set()
+
+      class GiveawayView(discord.ui.View):
+
+        def __init__(self):
+          super().__init__(timeout=ms_time / 1000)
+
+        @discord.ui.button(
+            label=f"Katıl • 0",
+            style=discord.ButtonStyle.primary,
+            emoji="🎉",
+            custom_id="join_giveaway",
+        )
+        async def join(
+            self, interaction: discord.Interaction, button: discord.ui.Button
+        ):
+          if interaction.user.id in participants:
+            participants.remove(interaction.user.id)
+            await interaction.response.send_message(
+                "Çekilişten başarıyla ayrıldın!", ephemeral=True
+            )
+          else:
+            participants.add(interaction.user.id)
+            await interaction.response.send_message(
+                "Çekilişe başarıyla katıldın! Şanslı kişi sen olabilirsin 🍀",
+                ephemeral=True,
+            )
+          button.label = f"Katıl • {len(participants)}"
+          await interaction.message.edit(view=self)
+
+        @discord.ui.button(
+            label="Katılımcılar",
+            style=discord.ButtonStyle.secondary,
+            emoji="👥",
+            custom_id="show_participants",
+        )
+        async def show(
+            self, interaction: discord.Interaction, button: discord.ui.Button
+        ):
+          if not participants:
+            await interaction.response.send_message(
+                "Henüz kimse katılmadı!", ephemeral=True
+            )
+          else:
+            list_str = ", ".join([f"<@{uid}>" for uid in participants])
+            await interaction.response.send_message(
+                f"Şu ana kadar katılanlar ({len(participants)}"
+                f" kişi):\n{list_str}",
+                ephemeral=True,
+            )
+
+      view = GiveawayView()
+      msg = await interaction.channel.send(embed=embed, view=view)
+
+      await asyncio.sleep(ms_time / 1000)
+
+      # Çekiliş Bitişi
+      for child in view.children:
+        child.disabled = True
+      await msg.edit(view=view)
+
+      part_array = list(participants)
+      if not part_array:
+        ended_embed = discord.Embed(
+            color=0xED4245,
+            title=f"🎉 {prz} (Sona Erdi)",
+            description=(
+                f"**Düzenleyen:** {interaction.user}\n**Toplam Katılımcı: 0"
+                " Kişi**\n\n🏆 **Kazananlar:**\nHiç kimse katılmadığı için"
+                " kazanan olamadı!"
+            ),
+        )
+        await msg.edit(embed=ended_embed)
+      else:
+        winners_list = []
+        for _ in range(min(win_count, len(part_array))):
+          chosen = random.choice(part_array)
+          part_array.remove(chosen)
+          winners_list.append(f"<@{chosen}>")
+
+        winners_text = ", ".join(winners_list)
+        ended_embed = discord.Embed(
+            color=0xED4245,
+            title=f"🎉 {prz} (Sona Erdi)",
+            description=(
+                f"**Düzenleyen:** {interaction.user}\n**Toplam Katılımcı:**"
+                f" {len(participants)} Kişi\n\n🏆"
+                f" **Kazananlar:**\n{winners_text}"
+            ),
+        )
+        await msg.edit(embed=ended_embed)
+        await interaction.channel.send(
+            f"Tebrikler {winners_text}! **{prz}** ödülünü kazandınız! 🥳"
+            f" (**{len(participants)}** kişi arasından seçildiniz.)"
+        )
+
+  await interaction.response.send_modal(GiveawayModal())
+
+
+# Flask sunucusunu arka planda thread ile başlat (Render 7/24 aktif kalması için)
+import threading
+
+threading.Thread(target=run_flask).start()
+
+# Botu Çalıştır
+bot.run(TOKEN)

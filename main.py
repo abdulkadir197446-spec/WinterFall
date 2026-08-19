@@ -1,6 +1,7 @@
 import asyncio
 import os
 import random
+import threading
 import time
 from datetime import datetime
 from io import BytesIO
@@ -21,7 +22,7 @@ app = Flask("")
 
 @app.route("/")
 def home():
-  return "Vlandia Pro Bot Aktif ve Çalışıyor!"
+  return "Bot is alive!", 200
 
 
 def run_flask():
@@ -312,7 +313,6 @@ class TicketButtons(discord.ui.View):
     await self.create_ticket(interaction)
 
   async def create_ticket(self, interaction: discord.Interaction):
-    # Zaman aşımı hatasını önlemek için önce defer kullanıyoruz
     await interaction.response.send_message(
         "Destek talebin oluşturuluyor, lütfen bekle...", ephemeral=True
     )
@@ -407,7 +407,7 @@ class TicketCloseView(discord.ui.View):
 
 @bot.event
 async def on_ready():
-  print(f"Bot başarıyla giriş yaptı: {bot.user.tag}")
+  print(f"Bot başarıyla giriş yaptı: {bot.user}")
   try:
     synced = await bot.tree.sync()
     print(f"{len(synced)} adet slash komutu senkronize edildi.")
@@ -469,7 +469,6 @@ async def on_member_join(member: discord.Member):
 )
 @app_commands.default_permissions(administrator=True)
 async def ticket_kur(interaction: discord.Interaction):
-  # Timeout (Uygulama yanıt vermedi) hatasını önlemek için önce defer uyguluyoruz
   await interaction.response.defer(ephemeral=True)
 
   embed = discord.Embed(
@@ -719,10 +718,16 @@ async def cekilis(interaction: discord.Interaction):
   await interaction.response.send_modal(GiveawayModal())
 
 
-# Flask sunucusunu arka planda thread ile başlat
-import threading
+# --- BAŞLATMA ---
+if __name__ == "__main__":
+  # Flask sunucusunu arka planda thread ile başlat
+  threading.Thread(target=run_flask).start()
 
-threading.Thread(target=run_flask).start()
-
-# Botu Çalıştır
-bot.run(TOKEN)
+  # Botu Çalıştır
+  if not TOKEN:
+    print(
+        "HATA: DISCORD_TOKEN bulunamadı! Lütfen Render Environment ayarlarına"
+        " ekle."
+    )
+  else:
+    bot.run(TOKEN)
